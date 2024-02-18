@@ -1,0 +1,26 @@
+[package]
+name = "simple"
+version = "0.1.0"
+edition = "2021"
+authors = ["Anton Kharuzhyi <publicantroids@gmail.com>"]
+publish = false
+license = "MIT OR Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+egui = "0.26.2"
+eframe = { version = "0.26.2", features = ["glow", "default_fonts"]}
+log = "0.4"
+env_logger = "0.11.0"
+egui-shape-editor = { path="../.." }
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+
+# Optimize all dependencies even in debug builds:
+[profile.dev.package."*"]
+opt-level = 2
+
+[patch.crates-io]

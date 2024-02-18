@@ -1,0 +1,23 @@
+[package]
+name = "egui-shape-editor"
+version = "0.1.0"
+edition = "2021"
+authors = ["Anton Kharuzhyi <publicantroids@gmail.com>"]
+license = "MIT OR Apache-2.0"
+include = ["../LICENSE-APACHE", "../LICENSE-MIT", "**/*.rs", "Cargo.toml"]
+description = "Shape Editor widget for Egui framework"
+keywords = ["gui", "egui", "widget"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+resolver = "2"
+members = [
+    "examples/*",
+]
+
+[dependencies]
+egui = "0.26.2"
+egui_extras = "0.26.2"
+num-traits = "0.2.18"
+ordered-float = "4.2.0"
