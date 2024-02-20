@@ -1,4 +1,4 @@
-var cacheName = 'egui-shape-editor-simple-example';
+var cacheName = 'egui-shape-editor-example';
 var filesToCache = [
   './',
   './index.html',

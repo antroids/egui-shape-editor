@@ -1,6 +1,6 @@
 {
   "name": "Egui Shape Editor Simple Example",
-  "short_name": "egui-shape-editor-simple-example",
+  "short_name": "egui-shape-editor-example",
   "icons": [
     {
       "src": "./favicon-16x16.png",
