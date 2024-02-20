@@ -1,5 +1,4 @@
 # Project exclude paths
 /target/
 /.idea/**
-/examples/**/dist/**
 *.iml
