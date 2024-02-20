@@ -1,3 +1,0 @@
-[build]
-public_url = "/dist/"
-target = "examples/simple/index.html"
