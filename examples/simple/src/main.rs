@@ -1,9 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use egui::epaint::CubicBezierShape;
-use egui::{Color32, Context, Shape, Stroke};
+use egui::{Color32, Context, DragValue, Shape, Stroke, Style, Visuals};
 use egui_shape_editor::shape_editor::style::Light;
-use egui_shape_editor::shape_editor::ShapeEditorBuilder;
+use egui_shape_editor::shape_editor::{ShapeEditorBuilder, ShapeEditorOptions};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
@@ -15,7 +15,15 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Shape Editor Simple Example",
         options,
-        Box::new(|_| Box::<App>::default()),
+        Box::new(|creation_context| {
+            let style = Style {
+                visuals: Visuals::light(),
+                ..Style::default()
+            };
+            creation_context.egui_ctx.set_style(style);
+
+            Box::<App>::default()
+        }),
     )
 }
 
@@ -41,6 +49,7 @@ fn main() {
 
 pub struct App {
     shape: Shape,
+    options: ShapeEditorOptions,
 }
 
 impl Default for App {
@@ -57,6 +66,7 @@ impl Default for App {
                 Color32::TRANSPARENT,
                 Stroke::new(5.0, Color32::GREEN),
             )),
+            options: ShapeEditorOptions::default(),
         }
     }
 }
@@ -64,11 +74,25 @@ impl Default for App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical(|ui| {
-                let style = Light::default();
-                ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
-                    .build()
-                    .show(ui, ctx)
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    let options = &mut self.options;
+                    ui.set_width(100.0);
+                    egui::stroke_ui(ui, &mut options.stroke, "Stroke");
+                    ui.separator();
+                    ui.checkbox(&mut options.snap_enabled, "Snap enabled");
+                    ui.add_enabled_ui(options.snap_enabled, |ui| {
+                        ui.add(DragValue::new(&mut options.snap_distance).clamp_range(0..=100));
+                    });
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    let style = Light::default();
+                    ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
+                        .options(self.options.clone())
+                        .build()
+                        .show(ui, ctx)
+                });
             });
         });
     }

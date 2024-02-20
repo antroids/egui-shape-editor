@@ -2,39 +2,39 @@ use egui::{Color32, Margin, Pos2, Shape, Stroke};
 
 #[derive(Clone)]
 pub struct Light {
-    path_point_stroke: Stroke,
-    control_point_radius: f32,
-    control_point_stroke: Stroke,
+    pub path_point_stroke: Stroke,
+    pub control_point_radius: f32,
+    pub control_point_stroke: Stroke,
 
-    canvas_bg_color: Color32,
+    pub canvas_bg_color: Color32,
 
-    border_stroke: Stroke,
+    pub border_stroke: Stroke,
 
-    selection_stroke: Stroke,
-    selection_dash_length: f32,
-    selection_gap_length: f32,
+    pub selection_stroke: Stroke,
+    pub selection_dash_length: f32,
+    pub selection_gap_length: f32,
 
-    rulers_width: f32,
-    rulers_stroke: Stroke,
-    rulers_half_stroke: Stroke,
-    rulers_sub_stroke: Stroke,
-    rulers_font: egui::FontId,
-    rulers_font_color: Color32,
-    rulers_div_height: f32,
-    rulers_half_div_height: f32,
-    rulers_sub_div_height: f32,
-    rulers_text_position: Pos2,
+    pub rulers_width: f32,
+    pub rulers_stroke: Stroke,
+    pub rulers_half_stroke: Stroke,
+    pub rulers_sub_stroke: Stroke,
+    pub rulers_font: egui::FontId,
+    pub rulers_font_color: Color32,
+    pub rulers_div_height: f32,
+    pub rulers_half_div_height: f32,
+    pub rulers_sub_div_height: f32,
+    pub rulers_text_position: Pos2,
 
-    grid_line_zero_stroke: Stroke,
-    grid_line_primary_stroke: Stroke,
-    grid_line_secondary_stroke: Stroke,
-    grid_line_secondary_gap: f32,
-    grid_line_secondary_length: f32,
+    pub grid_line_zero_stroke: Stroke,
+    pub grid_line_primary_stroke: Stroke,
+    pub grid_line_secondary_stroke: Stroke,
+    pub grid_line_secondary_gap: f32,
+    pub grid_line_secondary_length: f32,
 
-    snap_highlight_stroke: Stroke,
-    snap_highlight_dash_length: f32,
-    snap_highlight_gap_length: f32,
-    snap_highlight_point_mark_size: f32,
+    pub snap_highlight_stroke: Stroke,
+    pub snap_highlight_dash_length: f32,
+    pub snap_highlight_gap_length: f32,
+    pub snap_highlight_point_mark_size: f32,
 }
 
 impl Default for Light {

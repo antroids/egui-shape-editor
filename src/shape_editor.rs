@@ -29,12 +29,13 @@ pub struct ShapeEditor<'a> {
 
 #[derive(Clone)]
 pub struct ShapeEditorOptions {
-    scroll_factor: Vec2,
-    zoom_factor: f32,
-    undo_shortcut: KeyboardShortcut,
-    scaling_range: Range<Vec2>,
-    stroke: Stroke,
-    snap_distance: Option<f32>,
+    pub scroll_factor: Vec2,
+    pub zoom_factor: f32,
+    pub undo_shortcut: KeyboardShortcut,
+    pub scaling_range: Range<Vec2>,
+    pub stroke: Stroke,
+    pub snap_distance: f32,
+    pub snap_enabled: bool,
 }
 
 impl Default for ShapeEditorOptions {
@@ -45,7 +46,8 @@ impl Default for ShapeEditorOptions {
             undo_shortcut: KeyboardShortcut::new(Modifiers::CTRL, Key::Z),
             scaling_range: Vec2::splat(0.01)..Vec2::splat(10.0),
             stroke: Stroke::new(1.0, Color32::BLACK),
-            snap_distance: Some(5.0),
+            snap_distance: 5.0,
+            snap_enabled: true,
         }
     }
 }
@@ -78,10 +80,6 @@ impl Selection {
 
     fn is_control_point_selected(&self, index: usize) -> bool {
         self.control_points.contains(&index)
-    }
-
-    fn deselect_control_point(&mut self, index: usize) {
-        self.control_points.remove(&index);
     }
 
     fn clear_selected_control_points(&mut self) {

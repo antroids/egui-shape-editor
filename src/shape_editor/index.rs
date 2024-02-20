@@ -58,21 +58,6 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
         .min_by_key(|(k, _)| NotNan::new(k.sub(key).abs()).unwrap_or(NotNan::max_value()))
     }
 
-    pub fn find_closest_in_distance(
-        &self,
-        key: NotNan<K>,
-        max_distance: NotNan<K>,
-    ) -> Option<(&NotNan<K>, &HashSet<V>)> {
-        let d = max_distance.abs();
-        [
-            self.0.range(key - d..=key).last(),
-            self.0.range(key..=key + d).next(),
-        ]
-        .iter()
-        .filter_map(|v| *v)
-        .min_by_key(|(k, _)| NotNan::new(k.sub(key).abs()).unwrap_or(NotNan::max_value()))
-    }
-
     pub fn insert(&mut self, key: NotNan<K>, value: V) {
         if let Some(set) = self.0.get_mut(&key) {
             set.insert(value);

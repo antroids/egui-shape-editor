@@ -286,17 +286,17 @@ fn update_snap_point(
     memory: &ShapeEditorMemory,
     options: &ShapeEditorOptions,
 ) {
-    if let Some(snap_distance) = options.snap_distance {
-        if matches!(
+    if options.snap_enabled
+        && matches!(
             memory.mouse_drag,
             Some(MouseDrag::MoveShapeControlPoints(..))
-        ) {
-            snap_info.calculate_snap_point(
-                ctx.input.canvas_content_mouse_pos,
-                memory,
-                ctx.transform.ui_to_canvas_content.scale().x * snap_distance,
-            );
-        }
+        )
+    {
+        snap_info.calculate_snap_point(
+            ctx.input.canvas_content_mouse_pos,
+            memory,
+            ctx.transform.ui_to_canvas_content.scale().x * options.snap_distance,
+        );
     }
 }
 
