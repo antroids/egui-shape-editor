@@ -4,34 +4,34 @@ use crate::shape_editor::visitor::{
 use crate::shape_editor::visitor::{
     IndexedShapeControlPointsVisitorAdapter, IndexedShapesVisitor, IndexedShapesVisitorAdapter,
 };
-use egui::emath::Pos2;
+use dyn_clone::DynClone;
 use egui::ahash::HashMap;
-use egui::epaint::CubicBezierShape;
-use egui::{Color32, Shape, Stroke, Vec2};
-use std::ops::{AddAssign, Neg};
+use egui::emath::Pos2;
+use egui::epaint::{CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape};
+use egui::{Color32, Rect, Shape, Stroke, Vec2};
+use std::ops::{AddAssign, DerefMut, Neg};
 
-#[derive(Clone, Debug)]
-pub enum Action {
-    MoveShapeControlPoints(MoveShapeControlPoints),
-    InsertShape(InsertShape),
-    Noop,
+pub trait ShapeAction: DynClone + Send + Sync {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction>;
+    fn short_name(&self) -> String;
 }
 
-impl ShapeAction for Action {
-    fn apply(self, shape: &mut Shape) -> Self {
-        match self {
-            Action::MoveShapeControlPoints(a) => a.apply(shape),
-            Action::InsertShape(a) => a.apply(shape),
-            Action::Noop => Action::Noop,
-        }
+dyn_clone::clone_trait_object!(ShapeAction);
+
+#[derive(Clone)]
+pub struct Noop;
+
+impl ShapeAction for Noop {
+    fn apply(self: Box<Self>, _shape: &mut Shape) -> Box<dyn ShapeAction> {
+        self
+    }
+
+    fn short_name(&self) -> String {
+        "None".into()
     }
 }
 
-pub trait ShapeAction {
-    fn apply(self, shape: &mut Shape) -> Action;
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MoveShapeControlPoints(HashMap<usize, Vec2>);
 
 impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
@@ -51,7 +51,7 @@ impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
         }
     }
 
-    fn indexed_bezier_control_point(
+    fn indexed_control_point(
         &mut self,
         index: ShapeControlPointIndex,
         control_point: &mut Pos2,
@@ -92,13 +92,17 @@ impl MoveShapeControlPoints {
 }
 
 impl ShapeAction for MoveShapeControlPoints {
-    fn apply(mut self, shape: &mut Shape) -> Action {
-        IndexedShapeControlPointsVisitorAdapter(&mut self).visit(shape);
-        Action::MoveShapeControlPoints(self.invert())
+    fn apply(mut self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        IndexedShapeControlPointsVisitorAdapter(self.deref_mut()).visit(shape);
+        Box::new(self.invert())
+    }
+
+    fn short_name(&self) -> String {
+        "Move".into()
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct InsertShape {
     pub(crate) shape: Option<Shape>,
     pub(crate) replace: Option<usize>,
@@ -112,7 +116,7 @@ impl InsertShape {
         }
     }
 
-    pub fn cubic_bezier_by_two_points(
+    pub fn cubic_bezier_from_two_points(
         start_point: Pos2,
         start_point_control: Option<Pos2>,
         end_point: Pos2,
@@ -139,6 +143,58 @@ impl InsertShape {
             .into(),
         )
     }
+
+    pub fn quadratic_bezier_from_two_points(
+        start_point: Pos2,
+        start_point_control: Option<Pos2>,
+        end_point: Pos2,
+        stroke: Stroke,
+    ) -> Self {
+        let distance = start_point.distance(end_point);
+        let start_control_point = start_point_control
+            .map(|pos| start_point + (start_point - pos).normalized() * distance / 3.0)
+            .unwrap_or(start_point);
+        InsertShape::from_shape(
+            QuadraticBezierShape::from_points_stroke(
+                [start_point, start_control_point, end_point],
+                false,
+                Color32::TRANSPARENT,
+                stroke,
+            )
+            .into(),
+        )
+    }
+
+    pub fn circle_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
+        Shape::Circle(CircleShape::stroke(
+            end_point,
+            start_point.distance(end_point),
+            stroke,
+        ))
+        .into()
+    }
+
+    pub fn line_segment_from_two_points(
+        start_point: Pos2,
+        end_point: Pos2,
+        stroke: Stroke,
+    ) -> Self {
+        Shape::line_segment([start_point, end_point], stroke).into()
+    }
+
+    pub fn path_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
+        Shape::Path(PathShape::line(vec![start_point, end_point], stroke)).into()
+    }
+
+    pub fn rect_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
+        Shape::rect_stroke(Rect::from_two_pos(start_point, end_point), 0.0, stroke).into()
+    }
+}
+
+impl From<Shape> for InsertShape {
+    fn from(value: Shape) -> Self {
+        Self::from_shape(value)
+    }
 }
 
 impl IndexedShapesVisitor<Shape> for InsertShape {
@@ -155,11 +211,11 @@ impl IndexedShapesVisitor<Shape> for InsertShape {
 }
 
 impl ShapeAction for InsertShape {
-    fn apply(mut self, shape: &mut Shape) -> Action {
+    fn apply(mut self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
         if self.replace.is_some() {
-            let replaced = IndexedShapesVisitorAdapter(&mut self).visit(shape);
-            replaced.map_or(Action::Noop, |replaced| {
-                Action::InsertShape(Self {
+            let replaced = IndexedShapesVisitorAdapter(self.deref_mut()).visit(shape);
+            replaced.map_or(Box::new(Noop), |replaced| {
+                Box::new(Self {
                     shape: Some(replaced),
                     replace: self.replace,
                 })
@@ -173,10 +229,34 @@ impl ShapeAction for InsertShape {
                 vec.push(self.shape.take().unwrap_or(Shape::Noop));
             }
             let index = CountShapes::count(shape) - 1;
-            Action::InsertShape(InsertShape {
+            Box::new(Self {
                 shape: None,
                 replace: Some(index),
             })
         }
+    }
+
+    fn short_name(&self) -> String {
+        "Insert Shape".into()
+    }
+}
+
+#[derive(Clone)]
+pub struct Combined(Vec<Box<dyn ShapeAction>>);
+
+impl ShapeAction for Combined {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        let owned = *self;
+        let inverted: Vec<Box<dyn ShapeAction>> = owned
+            .0
+            .into_iter()
+            .map(|action| action.apply(shape))
+            .rev()
+            .collect();
+        Box::new(Self(inverted))
+    }
+
+    fn short_name(&self) -> String {
+        "Combined Action".into()
     }
 }

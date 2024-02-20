@@ -2,6 +2,7 @@
 
 use egui::epaint::CubicBezierShape;
 use egui::{Color32, Context, Shape, Stroke};
+use egui_shape_editor::shape_editor::style::Light;
 use egui_shape_editor::shape_editor::ShapeEditorBuilder;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -64,7 +65,8 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-                ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape)
+                let style = Light::default();
+                ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
                     .build()
                     .show(ui, ctx)
             });

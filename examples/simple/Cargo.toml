@@ -22,5 +22,3 @@ wasm-bindgen-futures = "0.4"
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
-
-[patch.crates-io]

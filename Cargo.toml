@@ -17,6 +17,7 @@ members = [
 ]
 
 [dependencies]
+dyn-clone = "1.0.16"
 egui = "0.26.2"
 egui_extras = "0.26.2"
 num-traits = "0.2.18"

@@ -1,8 +1,8 @@
 use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::index::GridLineType;
-use crate::shape_editor::{ShapeEditorMemory, ShapeEditorStyle};
+use crate::shape_editor::{style, ShapeEditorMemory};
 use egui::ahash::{HashSet, HashSetExt};
-use egui::{Color32, Pos2, Rect, Shape, Vec2};
+use egui::{Pos2, Rect, Shape, Vec2};
 use std::cmp::Ordering;
 use std::ops::Sub;
 
@@ -144,7 +144,7 @@ impl SnapInfo {
 pub fn paint_snap_point_highlight(
     ctx: &CanvasContext,
     snap_info: &SnapInfo,
-    style: &ShapeEditorStyle,
+    style: &dyn style::Style,
 ) {
     if let Some(snap_point) = snap_info.snap_point {
         let ui_snap_point = ctx.transform.canvas_content_to_ui.transform_pos(snap_point);
@@ -155,25 +155,25 @@ pub fn paint_snap_point_highlight(
                     let pos = ctx.transform.canvas_content_to_ui.transform_pos(*pos);
                     let pos_rect = Rect::from_center_size(
                         pos,
-                        Vec2::splat(style.snap_highlight_point_mark_size),
+                        Vec2::splat(style.snap_highlight_point_mark_size()),
                     );
                     let mut shape = Shape::dashed_line(
                         &[ui_snap_point, pos],
-                        style.snap_highlight_stroke,
-                        style.snap_highlight_dash_length,
-                        style.snap_highlight_gap_length,
+                        style.snap_highlight_stroke(),
+                        style.snap_highlight_dash_length(),
+                        style.snap_highlight_gap_length(),
                     );
                     shape.extend(Shape::dashed_line(
                         &[pos_rect.left_top(), pos_rect.right_bottom()],
-                        style.snap_highlight_stroke,
-                        style.snap_highlight_dash_length,
-                        style.snap_highlight_gap_length,
+                        style.snap_highlight_stroke(),
+                        style.snap_highlight_dash_length(),
+                        style.snap_highlight_gap_length(),
                     ));
                     shape.extend(Shape::dashed_line(
                         &[pos_rect.right_top(), pos_rect.left_bottom()],
-                        style.snap_highlight_stroke,
-                        style.snap_highlight_dash_length,
-                        style.snap_highlight_gap_length,
+                        style.snap_highlight_stroke(),
+                        style.snap_highlight_dash_length(),
+                        style.snap_highlight_gap_length(),
                     ));
                     Shape::Vec(shape)
                 }
@@ -184,9 +184,9 @@ pub fn paint_snap_point_highlight(
                             Pos2::new(x, canvas_rect.top()),
                             Pos2::new(x, canvas_rect.bottom()),
                         ],
-                        style.snap_highlight_stroke,
-                        style.snap_highlight_dash_length,
-                        style.snap_highlight_gap_length,
+                        style.snap_highlight_stroke(),
+                        style.snap_highlight_dash_length(),
+                        style.snap_highlight_gap_length(),
                     ))
                 }
                 SnapTarget::GridVertical(y) => {
@@ -196,9 +196,9 @@ pub fn paint_snap_point_highlight(
                             Pos2::new(canvas_rect.left(), y),
                             Pos2::new(canvas_rect.right(), y),
                         ],
-                        style.snap_highlight_stroke,
-                        style.snap_highlight_dash_length,
-                        style.snap_highlight_gap_length,
+                        style.snap_highlight_stroke(),
+                        style.snap_highlight_dash_length(),
+                        style.snap_highlight_gap_length(),
                     ))
                 }
             };

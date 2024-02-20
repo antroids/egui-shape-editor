@@ -1,11 +1,12 @@
 use crate::shape_editor::{ShapeControlPoint, ShapeControlPoints};
+use egui::ahash::HashMap;
 use egui::emath::Pos2;
 use egui::epaint::{
     CircleShape, CubicBezierShape, Mesh, PaintCallback, PathShape, QuadraticBezierShape, RectShape,
     Shape, Stroke, TextShape,
 };
-use egui::ahash::HashMap;
-use std::ops::AddAssign;
+use egui::Vec2;
+use std::ops::{Add, AddAssign};
 
 pub trait ShapeVisitor<R = (), I: Default = usize> {
     fn line_segment(
@@ -118,18 +119,17 @@ impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
         None
     }
 
-    fn indexed_bezier_control_point(
+    fn indexed_control_point(
         &mut self,
         _index: ShapeControlPointIndex,
         control_point: &mut Pos2,
         connected_points: HashMap<usize, Pos2>,
         _shape_type: ShapeType,
     ) -> Option<()> {
-        self.control_points
-            .push(ShapeControlPoint::BezierControlPoint(
-                *control_point,
-                connected_points,
-            ));
+        self.control_points.push(ShapeControlPoint::ControlPoint(
+            *control_point,
+            connected_points,
+        ));
         None
     }
 }
@@ -149,7 +149,7 @@ pub trait IndexedShapeControlPointsVisitor<R = ()> {
     ) -> Option<R> {
         None
     }
-    fn indexed_bezier_control_point(
+    fn indexed_control_point(
         &mut self,
         _index: ShapeControlPointIndex,
         _control_point: &mut Pos2,
@@ -308,10 +308,29 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
         index: &mut ShapeControlPointIndex,
         circle: &mut CircleShape,
     ) -> Option<R> {
-        let result = self
-            .0
-            .indexed_path_point(*index, &mut circle.center, ShapeType::Circle);
-        index.point_index.add_assign(1);
+        let result = {
+            let result = self
+                .0
+                .indexed_path_point(*index, &mut circle.center, ShapeType::Circle);
+            index.point_index.add_assign(1);
+            result
+        }
+        .or_else(|| {
+            let mut radius_point = circle
+                .center
+                .add(Vec2::angled(std::f32::consts::TAU / 8.0) * circle.radius);
+            let connected = HashMap::from_iter([(index.point_index - 1, circle.center)]);
+            let result = self.0.indexed_control_point(
+                *index,
+                &mut radius_point,
+                connected,
+                ShapeType::Circle,
+            );
+            circle.radius = radius_point.distance(circle.center);
+            index.point_index.add_assign(1);
+            result
+        });
+
         index.shape_index.add_assign(1);
         result
     }
@@ -378,7 +397,7 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 (index.point_index - 1, b.points[0]),
                 (index.point_index + 1, b.points[2]),
             ]);
-            let result = self.0.indexed_bezier_control_point(
+            let result = self.0.indexed_control_point(
                 *index,
                 &mut b.points[1],
                 connected,
@@ -415,7 +434,7 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 (index.point_index - 1, b.points[0]),
                 (index.point_index + 1, b.points[2]),
             ]);
-            let result = self.0.indexed_bezier_control_point(
+            let result = self.0.indexed_control_point(
                 *index,
                 &mut b.points[1],
                 connected,
@@ -429,7 +448,7 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 (index.point_index - 1, b.points[1]),
                 (index.point_index + 1, b.points[3]),
             ]);
-            let result = self.0.indexed_bezier_control_point(
+            let result = self.0.indexed_control_point(
                 *index,
                 &mut b.points[2],
                 connected,
@@ -486,7 +505,7 @@ impl IndexedShapeControlPointsVisitor<ShapeType> for GetShapeTypeByPointIndex {
         (index.point_index == self.0).then_some(shape_type)
     }
 
-    fn indexed_bezier_control_point(
+    fn indexed_control_point(
         &mut self,
         index: ShapeControlPointIndex,
         _control_point: &mut Pos2,
