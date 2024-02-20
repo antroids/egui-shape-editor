@@ -45,7 +45,7 @@ impl SnapInfo {
                     memory
                         .shape_control_points
                         .pos_by_index(*index)
-                        .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                        .map(SnapTarget::ShapeControlPoint)
                 }));
                 Some(x)
             }
@@ -62,7 +62,7 @@ impl SnapInfo {
                             memory
                                 .shape_control_points
                                 .pos_by_index(*index)
-                                .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                                .map(SnapTarget::ShapeControlPoint)
                         }));
                         Some(px)
                     }
@@ -71,7 +71,7 @@ impl SnapInfo {
                             memory
                                 .shape_control_points
                                 .pos_by_index(*index)
-                                .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                                .map(SnapTarget::ShapeControlPoint)
                         }));
                         self.targets.push(SnapTarget::GridHorizontal(gx));
                         Some(px)
@@ -90,7 +90,7 @@ impl SnapInfo {
                     memory
                         .shape_control_points
                         .pos_by_index(*index)
-                        .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                        .map(SnapTarget::ShapeControlPoint)
                 }));
                 Some(y)
             }
@@ -107,7 +107,7 @@ impl SnapInfo {
                             memory
                                 .shape_control_points
                                 .pos_by_index(*index)
-                                .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                                .map(SnapTarget::ShapeControlPoint)
                         }));
                         Some(py)
                     }
@@ -116,7 +116,7 @@ impl SnapInfo {
                             memory
                                 .shape_control_points
                                 .pos_by_index(*index)
-                                .map(|pos| SnapTarget::ShapeControlPoint(pos))
+                                .map(SnapTarget::ShapeControlPoint)
                         }));
                         self.targets.push(SnapTarget::GridVertical(gy));
                         Some(py)

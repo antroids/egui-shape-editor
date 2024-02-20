@@ -152,7 +152,7 @@ impl ShapeVisitor for TransformShape {
 
     fn circle(&mut self, _index: &mut usize, c: &mut CircleShape) -> Option<()> {
         c.center = self.0.transform_pos(c.center);
-        c.radius = c.radius * self.0.scale().x;
+        c.radius *= self.0.scale().x;
         None
     }
 
@@ -160,10 +160,10 @@ impl ShapeVisitor for TransformShape {
         let scale_factor = self.0.scale().length_sq();
         rect.rect.min = self.0.transform_pos(rect.rect.min);
         rect.rect.max = self.0.transform_pos(rect.rect.max);
-        rect.rounding.ne = rect.rounding.ne * scale_factor;
-        rect.rounding.nw = rect.rounding.nw * scale_factor;
-        rect.rounding.se = rect.rounding.se * scale_factor;
-        rect.rounding.sw = rect.rounding.sw * scale_factor;
+        rect.rounding.ne *= scale_factor;
+        rect.rounding.nw *= scale_factor;
+        rect.rounding.se *= scale_factor;
+        rect.rounding.sw *= scale_factor;
         None
     }
 

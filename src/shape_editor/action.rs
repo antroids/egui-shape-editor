@@ -76,7 +76,7 @@ impl MoveShapeControlPoints {
         Self(
             indexes
                 .into_iter()
-                .map(|index| (*index, translation.clone()))
+                .map(|index| (*index, *translation))
                 .collect(),
         )
     }

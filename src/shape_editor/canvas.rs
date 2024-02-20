@@ -133,7 +133,7 @@ pub(crate) struct CanvasContext {
 impl CanvasContext {
     fn new(canvas_rect: Rect, memory: &ShapeEditorMemory, response: &Response, ui: &Ui) -> Self {
         let transform = CanvasTransform::new(canvas_rect, &memory.transform);
-        let input = CanvasInput::new(&response, ui, &transform, memory.last_mouse_hover_pos);
+        let input = CanvasInput::new(response, ui, &transform, memory.last_mouse_hover_pos);
         let painter = ui.painter_at(canvas_rect);
         Self {
             transform,
@@ -356,7 +356,7 @@ fn handle_drag_in_progress(
                 .find_points_in_rect(
                     &ctx.transform
                         .ui_to_canvas_content
-                        .transform_rect(&normalize_rect(&rect)),
+                        .transform_rect(&normalize_rect(rect)),
                 )
                 .iter()
                 .for_each(|(_, index)| {
@@ -377,19 +377,16 @@ fn handle_drag_in_progress(
 
 fn handle_drag_released(memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
     if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
-        match memory.mouse_drag.take() {
-            Some(MouseDrag::MoveShapeControlPoints(start_pos, pos)) => {
-                if pos != start_pos && memory.selection.has_control_points() {
-                    memory.action_history.push(Box::new(
-                        MoveShapeControlPoints::from_index_and_translation(
-                            &memory.selection.control_points,
-                            &(pos - start_pos),
-                        )
-                        .invert(),
-                    ));
-                }
+        if let Some(MouseDrag::MoveShapeControlPoints(start_pos, pos)) = memory.mouse_drag.take() {
+            if pos != start_pos && memory.selection.has_control_points() {
+                memory.action_history.push(Box::new(
+                    MoveShapeControlPoints::from_index_and_translation(
+                        &memory.selection.control_points,
+                        &(pos - start_pos),
+                    )
+                    .invert(),
+                ));
             }
-            _ => {}
         }
     }
 }
@@ -434,7 +431,7 @@ fn handle_primary_pressed(
 ) {
     if ctx.input.canvas_mouse_hover_pos.is_some()
         && ctx.input.mouse_primary_pressed
-        && !memory.mouse_drag.is_some()
+        && memory.mouse_drag.is_none()
     {
         let next_selected =
             memory
@@ -444,12 +441,13 @@ fn handle_primary_pressed(
                     hovered_ui_shape_points
                         .keys()
                         .skip_while(|hovered_index| **hovered_index != single_selected_index)
+                        .skip(1)
                         .next()
                         .copied()
                 });
-        if !ctx.input.action_modifier.do_not_deselect_selected_points()
-            && !ctx.input.action_modifier.add_point_on_click()
-            && !(ctx.input.drag_started
+        if !(ctx.input.action_modifier.do_not_deselect_selected_points()
+            || ctx.input.action_modifier.add_point_on_click()
+            || ctx.input.drag_started
                 && hovered_ui_shape_points.keys().any(|hovered_index| {
                     memory.selection.is_control_point_selected(*hovered_index)
                 }))
@@ -466,7 +464,7 @@ fn handle_primary_pressed(
 }
 
 fn normalize_rect(rect: &Rect) -> Rect {
-    let mut rect = rect.clone();
+    let mut rect = *rect;
     if rect.left() > rect.right() {
         let temp = rect.left();
         *rect.left_mut() = rect.right();

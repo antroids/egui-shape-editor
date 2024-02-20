@@ -79,25 +79,25 @@ impl Style for Light {
     fn selection_shape(&self, min: Pos2, max: Pos2) -> Shape {
         let mut vec = Shape::dashed_line(
             &[min, Pos2::new(max.x, min.y)],
-            self.selection_stroke.clone(),
+            self.selection_stroke,
             self.selection_dash_length,
             self.selection_gap_length,
         );
         vec.extend(Shape::dashed_line(
             &[min, Pos2::new(min.x, max.y)],
-            self.selection_stroke.clone(),
+            self.selection_stroke,
             self.selection_dash_length,
             self.selection_gap_length,
         ));
         vec.extend(Shape::dashed_line(
             &[Pos2::new(min.x, max.y), max],
-            self.selection_stroke.clone(),
+            self.selection_stroke,
             self.selection_dash_length,
             self.selection_gap_length,
         ));
         vec.extend(Shape::dashed_line(
             &[Pos2::new(max.x, min.y), max],
-            self.selection_stroke.clone(),
+            self.selection_stroke,
             self.selection_dash_length,
             self.selection_gap_length,
         ));

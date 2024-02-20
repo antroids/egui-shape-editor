@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 use std::hash::Hash;
 use std::ops::{RangeBounds, Sub};
 
+pub type SnapComponent = (f32, HashSet<usize>);
+pub type SnapPoint = (Option<SnapComponent>, Option<SnapComponent>);
+
 #[derive(Clone, Default, Debug)]
 pub struct FloatIndex<K: FloatCore, V>(pub BTreeMap<NotNan<K>, HashSet<V>>);
 
@@ -54,7 +57,7 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
                 .map(|(key, value)| (key, value.sub(ignore_values))),
         ]
         .into_iter()
-        .filter_map(|v| v)
+        .flatten()
         .min_by_key(|(k, _)| NotNan::new(k.sub(key).abs()).unwrap_or(NotNan::max_value()))
     }
 
@@ -168,12 +171,7 @@ impl ShapeControlPointsIndex {
             })
     }
 
-    pub fn snap_point(
-        &self,
-        pos: Pos2,
-        max_distance: f32,
-        ignore: &HashSet<usize>,
-    ) -> (Option<(f32, HashSet<usize>)>, Option<(f32, HashSet<usize>)>) {
+    pub fn snap_point(&self, pos: Pos2, max_distance: f32, ignore: &HashSet<usize>) -> SnapPoint {
         let x = self
             .x_index
             .find_closest_in_distance_and_ignore(

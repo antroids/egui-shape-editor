@@ -301,7 +301,7 @@ impl<'a> ShapeEditor<'a> {
         self.show_canvas(ui, ctx, outer_rect, &mut memory);
 
         let ui_painter = ui.painter();
-        rulers::paint_rulers(self.style, &ui_painter, outer_rect, &memory);
+        rulers::paint_rulers(self.style, ui_painter, outer_rect, &memory);
 
         if ui.input_mut(|input| input.consume_shortcut(&self.options.undo_shortcut)) {
             memory.undo(self.shape);
