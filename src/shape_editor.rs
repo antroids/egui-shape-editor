@@ -1,7 +1,7 @@
 use crate::shape_editor::action::ShapeAction;
-use crate::shape_editor::index::{GridIndex, ShapeControlPointsIndex};
-use crate::shape_editor::visitor::{IndexedShapeControlPointsVisitorAdapter, ShapeVisitor};
-use egui::ahash::{HashMap, HashSet};
+use crate::shape_editor::index::GridIndex;
+use control_point::{ShapeControlPoint, ShapeControlPoints};
+use egui::ahash::HashSet;
 use egui::{
     Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rangef, Rect, Response, Sense,
     Shape, Stroke, Ui, Vec2,
@@ -12,6 +12,7 @@ use transform::Transform;
 mod action;
 mod canvas;
 mod canvas_context_menu;
+mod control_point;
 mod grid;
 mod index;
 mod rulers;
@@ -162,123 +163,6 @@ pub struct ShapeEditorResponse {
 
 pub struct ShapeEditorCanvasResponse {
     pub response: Response,
-}
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-enum ShapeControlPoint {
-    PathPoint(Pos2),
-    ControlPoint(Pos2, HashMap<usize, Pos2>),
-}
-
-impl ShapeControlPoint {
-    fn position(&self) -> Pos2 {
-        match self {
-            ShapeControlPoint::PathPoint(pos) => *pos,
-            ShapeControlPoint::ControlPoint(pos, ..) => *pos,
-        }
-    }
-
-    fn stroke(&self, style: &dyn style::Style) -> Stroke {
-        match self {
-            ShapeControlPoint::PathPoint(_) => style.path_point_stroke(),
-            ShapeControlPoint::ControlPoint(..) => style.control_point_stroke(),
-        }
-    }
-
-    fn to_shape(&self, hovered: bool, selected: bool, style: &dyn style::Style) -> Shape {
-        let stroke = self.stroke(style);
-        let radius = style.control_point_radius();
-        let pos = self.position();
-        let mut vec_shape = if let Self::ControlPoint(pos, path_point) = self {
-            path_point
-                .values()
-                .map(|connected_pos| Shape::LineSegment {
-                    points: [*pos, *connected_pos],
-                    stroke: Stroke::new(1.0, Color32::GRAY),
-                })
-                .collect()
-        } else {
-            Vec::default()
-        };
-
-        vec_shape.push(Shape::circle_stroke(pos, radius, stroke));
-        if hovered {
-            vec_shape.push(Shape::circle_filled(
-                pos,
-                radius,
-                stroke.color.linear_multiply(0.5),
-            ));
-        }
-        if selected {
-            vec_shape.push(Shape::circle_stroke(pos, radius + 2.0, stroke))
-        }
-
-        Shape::Vec(vec_shape)
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-struct ShapeControlPoints {
-    control_points: Vec<ShapeControlPoint>,
-    index: ShapeControlPointsIndex,
-}
-
-impl ShapeControlPoints {
-    fn collect(shape: &mut Shape) -> Self {
-        let mut slf = Self::default();
-        IndexedShapeControlPointsVisitorAdapter(&mut slf).visit(shape);
-        slf.rebuild_index();
-        slf
-    }
-
-    fn points_in_radius(&self, pos: Pos2, radius: f32) -> HashMap<usize, ShapeControlPoint> {
-        self.index
-            .find_points_in_distance(pos, radius)
-            .iter()
-            .map(|(_, index)| (*index, self.control_points[*index].clone()))
-            .collect()
-    }
-
-    fn connected_bezier_control_point(&self, path_point_index: usize) -> Option<Pos2> {
-        self.control_points.iter().find_map(|point| {
-            if let ShapeControlPoint::ControlPoint(pos, connected) = point {
-                connected.contains_key(&path_point_index).then_some(*pos)
-            } else {
-                None
-            }
-        })
-    }
-
-    fn rebuild_index(&mut self) {
-        self.index.clear();
-        self.control_points
-            .iter()
-            .enumerate()
-            .for_each(|(index, point)| self.index.insert(point.position(), index));
-    }
-
-    fn by_index(&self, index: usize) -> Option<&ShapeControlPoint> {
-        self.control_points.get(index)
-    }
-
-    fn pos_by_index(&self, index: usize) -> Option<Pos2> {
-        self.by_index(index).map(|p| p.position())
-    }
-}
-
-impl PartialEq for ShapeControlPoints {
-    fn eq(&self, other: &Self) -> bool {
-        self.control_points.eq(&other.control_points)
-    }
-}
-
-impl IntoIterator for ShapeControlPoints {
-    type Item = ShapeControlPoint;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.control_points.into_iter()
-    }
 }
 
 fn grid_step(scale: f32) -> f32 {

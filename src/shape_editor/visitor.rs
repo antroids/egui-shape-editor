@@ -1,4 +1,3 @@
-use crate::shape_editor::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::HashMap;
 use egui::emath::Pos2;
 use egui::epaint::{
@@ -105,33 +104,6 @@ pub enum ShapeType {
     QuadraticBezier,
     CubicBezier,
     Callback,
-}
-
-impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
-    fn indexed_path_point(
-        &mut self,
-        _index: ShapeControlPointIndex,
-        point: &mut Pos2,
-        _shape_type: ShapeType,
-    ) -> Option<()> {
-        self.control_points
-            .push(ShapeControlPoint::PathPoint(*point));
-        None
-    }
-
-    fn indexed_control_point(
-        &mut self,
-        _index: ShapeControlPointIndex,
-        control_point: &mut Pos2,
-        connected_points: HashMap<usize, Pos2>,
-        _shape_type: ShapeType,
-    ) -> Option<()> {
-        self.control_points.push(ShapeControlPoint::ControlPoint(
-            *control_point,
-            connected_points,
-        ));
-        None
-    }
 }
 
 #[derive(Copy, Clone, Default, PartialEq)]

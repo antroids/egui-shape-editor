@@ -1,11 +1,12 @@
 use crate::shape_editor::action::{InsertShape, ShapeAction};
 use crate::shape_editor::{
-    grid, style, MouseDrag, ShapeControlPoint, ShapeControlPoints, ShapeEditor,
-    ShapeEditorCanvasResponse, ShapeEditorMemory, ShapeEditorOptions,
+    grid, style, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory,
+    ShapeEditorOptions,
 };
 
 use super::transform::Transform;
 use crate::shape_editor::action::MoveShapeControlPoints;
+use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
 use crate::shape_editor::visitor::{CountShapeControlPoints, GetShapeTypeByPointIndex, ShapeType};
@@ -227,7 +228,7 @@ impl<'a> ShapeEditor<'a> {
         let Some(start_index) = memory.selection.single_control_point() else {
             return;
         };
-        let Some(ShapeControlPoint::PathPoint(start_pos)) =
+        let Some(ShapeControlPoint::PathPoint { position, .. }) =
             memory.shape_control_points.by_index(start_index).cloned()
         else {
             return;
@@ -246,7 +247,7 @@ impl<'a> ShapeEditor<'a> {
                         .connected_bezier_control_point(start_index);
                     self.apply_action(
                         InsertShape::quadratic_bezier_from_two_points(
-                            start_pos,
+                            position,
                             control_point,
                             mouse_pos,
                             self.options.stroke,
@@ -263,7 +264,7 @@ impl<'a> ShapeEditor<'a> {
                         .connected_bezier_control_point(start_index);
                     self.apply_action(
                         InsertShape::cubic_bezier_from_two_points(
-                            start_pos,
+                            position,
                             start_control_point,
                             mouse_pos,
                             self.options.stroke,
