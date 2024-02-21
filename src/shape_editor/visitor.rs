@@ -1,3 +1,4 @@
+use crate::shape_editor::utils::normalize_rect;
 use egui::ahash::HashMap;
 use egui::emath::Pos2;
 use egui::epaint::{
@@ -322,6 +323,7 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
             index.point_index.add_assign(1);
             result
         });
+        rect.rect = normalize_rect(&rect.rect);
         index.shape_index.add_assign(1);
         result
     }

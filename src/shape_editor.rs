@@ -3,8 +3,8 @@ use crate::shape_editor::index::GridIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::HashSet;
 use egui::{
-    Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rangef, Rect, Response, Sense,
-    Shape, Stroke, Ui, Vec2,
+    Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rect, Response, Sense, Shape,
+    Stroke, Ui, Vec2,
 };
 use std::ops::Range;
 use transform::Transform;
@@ -19,6 +19,7 @@ mod rulers;
 mod snap;
 pub mod style;
 mod transform;
+mod utils;
 mod visitor;
 
 pub struct ShapeEditor<'a> {
@@ -163,16 +164,6 @@ pub struct ShapeEditorResponse {
 
 pub struct ShapeEditorCanvasResponse {
     pub response: Response,
-}
-
-fn grid_step(scale: f32) -> f32 {
-    50f32 * 5f32.powi(-scale.log(5.0).round() as i32)
-}
-
-fn step_by(range: Rangef, step: f32) -> impl Iterator<Item = f32> {
-    let min = (range.min / step).floor() as i32;
-    let max = (range.max / step).ceil() as i32;
-    (min..max).map(move |i| i as f32 * step)
 }
 
 impl<'a> ShapeEditor<'a> {

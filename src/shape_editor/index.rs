@@ -1,4 +1,5 @@
 use crate::shape_editor::canvas::CanvasTransform;
+use crate::shape_editor::utils;
 use egui::ahash::{HashMap, HashSet};
 use egui::{Pos2, Rect};
 use num_traits::Bounded;
@@ -219,10 +220,10 @@ impl GridIndex {
         let x_range = canvas_viewport.x_range();
         let y_range = canvas_viewport.y_range();
         let scale = transform.canvas_content_to_ui.scale().x;
-        let step = super::grid_step(scale);
+        let step = utils::grid_step(scale);
         let half_step = step / 2.0;
         let sub_step = half_step / 3.0;
-        for x in super::step_by(x_range, step) {
+        for x in utils::step_by(x_range, step) {
             if x == 0.0 {
                 slf.add_horizontal(x, GridLineType::Zero);
             } else {
@@ -235,10 +236,10 @@ impl GridIndex {
             slf.add_horizontal(x + half_step + sub_step * 2.0, GridLineType::Sub);
         }
         let scale = transform.canvas_content_to_ui.scale().y;
-        let step = super::grid_step(scale);
+        let step = utils::grid_step(scale);
         let half_step = step / 2.0;
         let sub_step = half_step / 3.0;
-        for y in super::step_by(y_range, step) {
+        for y in utils::step_by(y_range, step) {
             if y == 0.0 {
                 slf.add_vertical(y, GridLineType::Zero);
             } else {

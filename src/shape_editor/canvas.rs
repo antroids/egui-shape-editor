@@ -1,15 +1,12 @@
 use crate::shape_editor::action::{InsertShape, ShapeAction};
-use crate::shape_editor::{
-    grid, style, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory,
-    ShapeEditorOptions,
-};
+use crate::shape_editor::{grid, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory, ShapeEditorOptions, style, utils};
 
 use super::transform::Transform;
 use crate::shape_editor::action::MoveShapeControlPoints;
 use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
-use crate::shape_editor::visitor::{CountShapeControlPoints, GetShapeTypeByPointIndex, ShapeType};
+use crate::shape_editor::visitor::{CountShapeControlPoints, ShapeType};
 use egui::ahash::HashMap;
 use egui::{
     Color32, Context, Modifiers, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
@@ -233,7 +230,10 @@ impl<'a> ShapeEditor<'a> {
         else {
             return;
         };
-        if let Some(shape_type) = GetShapeTypeByPointIndex::shape_type(self.shape, start_index) {
+        if let Some(shape_type) = memory
+            .shape_control_points
+            .shape_type_by_control_point(start_index)
+        {
             match shape_type {
                 ShapeType::Circle => {}
                 ShapeType::LineSegment => {}
@@ -357,7 +357,7 @@ fn handle_drag_in_progress(
                 .find_points_in_rect(
                     &ctx.transform
                         .ui_to_canvas_content
-                        .transform_rect(&normalize_rect(rect)),
+                        .transform_rect(&utils::normalize_rect(rect)),
                 )
                 .iter()
                 .for_each(|(_, index)| {
@@ -462,21 +462,6 @@ fn handle_primary_pressed(
             memory.selection.select_control_point(index_to_select);
         }
     }
-}
-
-fn normalize_rect(rect: &Rect) -> Rect {
-    let mut rect = *rect;
-    if rect.left() > rect.right() {
-        let temp = rect.left();
-        *rect.left_mut() = rect.right();
-        *rect.right_mut() = temp;
-    }
-    if rect.top() > rect.bottom() {
-        let temp = rect.top();
-        *rect.top_mut() = rect.bottom();
-        *rect.bottom_mut() = temp;
-    }
-    rect
 }
 
 fn paint_canvas_border(ctx: &CanvasContext, style: &dyn style::Style) {

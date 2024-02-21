@@ -28,6 +28,13 @@ impl ShapeControlPoint {
         }
     }
 
+    pub fn shape_index(&self) -> usize {
+        match self {
+            ShapeControlPoint::PathPoint { shape_index, .. } => *shape_index,
+            ShapeControlPoint::ControlPoint { shape_index, .. } => *shape_index,
+        }
+    }
+
     fn stroke(&self, style: &dyn style::Style) -> Stroke {
         match self {
             ShapeControlPoint::PathPoint { .. } => style.path_point_stroke(),
@@ -75,6 +82,7 @@ impl ShapeControlPoint {
 #[derive(Default, Clone, Debug)]
 pub struct ShapeControlPoints {
     pub control_points: Vec<ShapeControlPoint>,
+    pub shapes: HashMap<usize, ShapeType>,
     pub index: ShapeControlPointsIndex,
 }
 
@@ -82,7 +90,6 @@ impl ShapeControlPoints {
     pub fn collect(shape: &mut Shape) -> Self {
         let mut slf = Self::default();
         IndexedShapeControlPointsVisitorAdapter(&mut slf).visit(shape);
-        slf.rebuild_index();
         slf
     }
 
@@ -111,20 +118,19 @@ impl ShapeControlPoints {
         })
     }
 
-    pub fn rebuild_index(&mut self) {
-        self.index.clear();
-        self.control_points
-            .iter()
-            .enumerate()
-            .for_each(|(index, point)| self.index.insert(point.position(), index));
-    }
-
     pub fn by_index(&self, index: usize) -> Option<&ShapeControlPoint> {
         self.control_points.get(index)
     }
 
     pub fn pos_by_index(&self, index: usize) -> Option<Pos2> {
         self.by_index(index).map(|p| p.position())
+    }
+
+    pub fn shape_type_by_control_point(&self, index: usize) -> Option<ShapeType> {
+        self.control_points
+            .get(index)
+            .and_then(|point| self.shapes.get(&point.shape_index()))
+            .cloned()
     }
 }
 
@@ -148,12 +154,14 @@ impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
         &mut self,
         index: ShapeControlPointIndex,
         point: &mut Pos2,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         self.control_points.push(ShapeControlPoint::PathPoint {
             position: *point,
             shape_index: index.shape_index,
         });
+        self.shapes.insert(index.shape_index, shape_type);
+        self.index.insert(*point, self.control_points.len() - 1);
         None
     }
 
@@ -162,13 +170,16 @@ impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
         index: ShapeControlPointIndex,
         control_point: &mut Pos2,
         connected_points: HashMap<usize, Pos2>,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         self.control_points.push(ShapeControlPoint::ControlPoint {
             position: *control_point,
             shape_index: index.shape_index,
             connected_points,
         });
+        self.shapes.insert(index.shape_index, shape_type);
+        self.index
+            .insert(*control_point, self.control_points.len() - 1);
         None
     }
 }
