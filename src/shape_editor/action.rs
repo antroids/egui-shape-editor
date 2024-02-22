@@ -9,6 +9,7 @@ use egui::ahash::{HashMap, HashSet};
 use egui::emath::Pos2;
 use egui::epaint::{CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
 use egui::{Color32, Rect, Shape, Stroke, Vec2};
+use itertools::Itertools;
 use std::ops::{AddAssign, DerefMut, Neg};
 
 pub trait ShapeAction: DynClone + Send + Sync {
@@ -287,11 +288,17 @@ pub enum ShapePoint {
 }
 
 #[derive(Clone)]
-pub struct RemoveShapePoints(HashSet<usize>);
+pub struct RemoveShapePoints(HashSet<ShapePointIndex>);
 
 impl ShapeAction for RemoveShapePoints {
     fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
-        todo!()
+        let owned = *self;
+        let mut visitor = RemoveShapePointsVisitor {
+            index_to_remove: owned.0,
+            removed: Default::default(),
+        };
+        IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
+        Box::new(AddShapePoints(visitor.removed))
     }
 
     fn short_name(&self) -> String {
@@ -300,38 +307,63 @@ impl ShapeAction for RemoveShapePoints {
 }
 
 #[derive(Clone)]
+pub struct AddShapePoints(HashMap<usize, HashMap<usize, ShapePoint>>);
+
+impl AddShapePoints {
+    pub fn single_point(index: ShapePointIndex, point: ShapePoint) -> Self {
+        Self(HashMap::from_iter([(
+            index.shape_index,
+            HashMap::from_iter([(index.point_index, point)]),
+        )]))
+    }
+}
+
+impl ShapeAction for AddShapePoints {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        let owned = *self;
+        let mut visitor = AddShapePointsVisitor {
+            index_to_add: owned.0,
+            added: Default::default(),
+        };
+        IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
+        Box::new(RemoveShapePoints(visitor.added))
+    }
+
+    fn short_name(&self) -> String {
+        "Add points".into()
+    }
+}
+
+#[derive(Clone)]
 struct RemoveShapePointsVisitor {
-    index_to_remove: HashSet<usize>,
+    index_to_remove: HashSet<ShapePointIndex>,
     removed: HashMap<usize, HashMap<usize, ShapePoint>>,
 }
 
-impl ShapeVisitor<(), ShapePointIndex> for RemoveShapePointsVisitor {
-    fn single_shape(&mut self, shape: &mut Shape, index: &mut ShapePointIndex) -> Option<()> {
+impl IndexedShapesVisitor for RemoveShapePointsVisitor {
+    fn indexed_single_shape(&mut self, shape_index: usize, shape: &mut Shape) -> Option<()> {
         match shape {
-            Shape::Circle(_) => index.point_index.add_assign(2),
-            Shape::LineSegment { .. } => index.point_index.add_assign(2),
             Shape::Path(path) => {
                 let count = path.points.len();
-                for i in (index.point_index..index.point_index + count).rev() {
-                    if let Some(i) = self.index_to_remove.take(&i) {
+                for i in (0..count).rev() {
+                    let shape_point_index = (shape_index, i).into();
+                    if self.index_to_remove.remove(&shape_point_index) {
                         self.removed
-                            .entry(index.shape_index)
+                            .entry(shape_index)
                             .or_default()
-                            .insert(i, ShapePoint::Pos(path.points.remove(i)));
+                            .insert(shape_index, ShapePoint::Pos(path.points.remove(i)));
                     }
                     if self.index_to_remove.is_empty() {
                         break;
                     }
                 }
-                index.point_index.add_assign(count);
             }
-            Shape::Rect(_) => index.point_index.add_assign(2),
-            Shape::Text(_) => index.point_index.add_assign(1),
             Shape::Mesh(mesh) => {
                 let count = mesh.vertices.len();
-                for i in (index.point_index..index.point_index + count).rev() {
-                    if let Some(i) = self.index_to_remove.take(&i) {
-                        self.removed.entry(index.shape_index).or_default().insert(
+                for i in (0..count).rev() {
+                    let shape_point_index = (shape_index, i).into();
+                    if self.index_to_remove.remove(&shape_point_index) {
+                        self.removed.entry(shape_index).or_default().insert(
                             i,
                             ShapePoint::Vertex(mesh.vertices.remove(i), mesh.indices.remove(i)),
                         );
@@ -340,18 +372,41 @@ impl ShapeVisitor<(), ShapePointIndex> for RemoveShapePointsVisitor {
                         break;
                     }
                 }
-                index.point_index.add_assign(count);
             }
-            Shape::QuadraticBezier(_) => index.point_index.add_assign(3),
-            Shape::CubicBezier(_) => index.point_index.add_assign(4),
             _ => {}
         }
-        index.shape_index.add_assign(1);
         self.index_to_remove.is_empty().then_some(())
     }
 }
 
-struct AddShapePoints {
+struct AddShapePointsVisitor {
     index_to_add: HashMap<usize, HashMap<usize, ShapePoint>>,
-    added: HashSet<usize>,
+    added: HashSet<ShapePointIndex>,
+}
+
+impl IndexedShapesVisitor for AddShapePointsVisitor {
+    fn indexed_single_shape(&mut self, shape_index: usize, shape: &mut Shape) -> Option<()> {
+        if let Some(points_to_add) = self.index_to_add.remove(&shape_index) {
+            for (point_index, shape_point) in points_to_add.into_iter().sorted_by_key(|(k, _)| *k) {
+                match shape {
+                    Shape::Path(path) => {
+                        if let ShapePoint::Pos(pos) = shape_point {
+                            path.points.insert(point_index, pos);
+                            self.added.insert((shape_index, point_index).into());
+                        }
+                    }
+                    Shape::Mesh(mesh) => {
+                        if let ShapePoint::Vertex(vertex, vertex_index) = shape_point {
+                            mesh.vertices.insert(point_index, vertex);
+                            mesh.indices.insert(point_index, vertex_index);
+                            self.added.insert((shape_index, point_index).into());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        self.index_to_add.is_empty().then_some(())
+    }
 }

@@ -1,4 +1,4 @@
-use crate::shape_editor::action::{InsertShape, ShapeAction};
+use crate::shape_editor::action::{AddShapePoints, InsertShape, ShapeAction, ShapePoint};
 use crate::shape_editor::{
     grid, style, utils, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory,
     ShapeEditorOptions,
@@ -277,29 +277,40 @@ impl<'a> ShapeEditor<'a> {
     }
 
     fn handle_add_point(&mut self, memory: &mut ShapeEditorMemory, mouse_pos: Pos2) {
-        let Some(start_index) = memory.selection.single_control_point() else {
+        let Some(selected_point) = memory.selection.single_control_point() else {
             return;
         };
-        let Some(ShapeControlPoint::PathPoint { position, .. }) =
-            memory.shape_control_points.by_index(start_index).cloned()
+        let Some(ShapeControlPoint::PathPoint { position, .. }) = memory
+            .shape_control_points
+            .by_index(selected_point)
+            .cloned()
         else {
             return;
         };
         if let Some(shape_type) = memory
             .shape_control_points
-            .shape_type_by_control_point(start_index)
+            .shape_type_by_control_point(selected_point)
         {
             match shape_type {
                 ShapeType::Circle => {}
                 ShapeType::LineSegment => {}
-                ShapeType::Path => {}
+                ShapeType::Path => {
+                    let new_point_index = selected_point.next_point();
+                    self.apply_action(
+                        AddShapePoints::single_point(new_point_index, ShapePoint::Pos(mouse_pos)),
+                        memory,
+                    );
+                    memory
+                        .selection
+                        .select_single_control_point(new_point_index);
+                }
                 ShapeType::Rect => {}
                 ShapeType::Text => {}
                 ShapeType::Mesh => {}
                 ShapeType::QuadraticBezier => {
                     let control_point = memory
                         .shape_control_points
-                        .connected_bezier_control_point(start_index);
+                        .connected_bezier_control_point(selected_point);
                     self.apply_action(
                         InsertShape::quadratic_bezier_from_two_points(
                             position,
@@ -316,7 +327,7 @@ impl<'a> ShapeEditor<'a> {
                 ShapeType::CubicBezier => {
                     let start_control_point = memory
                         .shape_control_points
-                        .connected_bezier_control_point(start_index);
+                        .connected_bezier_control_point(selected_point);
                     self.apply_action(
                         InsertShape::cubic_bezier_from_two_points(
                             position,
