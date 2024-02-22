@@ -1,5 +1,6 @@
 use crate::shape_editor::canvas::CanvasTransform;
 use crate::shape_editor::utils;
+use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::{HashMap, HashSet};
 use egui::{Pos2, Rect};
 use num_traits::Bounded;
@@ -9,7 +10,7 @@ use std::collections::BTreeMap;
 use std::hash::Hash;
 use std::ops::{RangeBounds, Sub};
 
-pub type SnapComponent = (f32, HashSet<usize>);
+pub type SnapComponent = (f32, HashSet<ShapePointIndex>);
 pub type SnapPoint = (Option<SnapComponent>, Option<SnapComponent>);
 
 #[derive(Clone, Default, Debug)]
@@ -77,18 +78,22 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
 
 #[derive(Clone, Default, Debug)]
 pub struct ShapeControlPointsIndex {
-    pub x_index: FloatIndex<f32, usize>,
-    pub y_index: FloatIndex<f32, usize>,
+    pub x_index: FloatIndex<f32, ShapePointIndex>,
+    pub y_index: FloatIndex<f32, ShapePointIndex>,
 }
 
 impl ShapeControlPointsIndex {
-    pub fn insert(&mut self, pos: Pos2, index: usize) {
+    pub fn insert(&mut self, pos: Pos2, index: ShapePointIndex) {
         let not_nan_pos = not_nan_pos2(pos);
         self.x_index.insert(not_nan_pos.0, index);
         self.y_index.insert(not_nan_pos.1, index);
     }
 
-    pub fn find_points_in_distance(&self, pos: Pos2, max_distance: f32) -> Vec<(Pos2, usize)> {
+    pub fn find_points_in_distance(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+    ) -> Vec<(Pos2, ShapePointIndex)> {
         let not_nan_pos = not_nan_pos2(pos);
         let x_points = self
             .x_index
@@ -96,7 +101,7 @@ impl ShapeControlPointsIndex {
         let y_points = self
             .y_index
             .find_in_distance(not_nan_pos.1, not_nan_f32(max_distance));
-        let y_points_index: HashMap<usize, NotNan<f32>> = y_points
+        let y_points_index: HashMap<ShapePointIndex, NotNan<f32>> = y_points
             .flat_map(|(y, y_index_set)| y_index_set.iter().map(|index| (*index, *y)))
             .collect();
         x_points
@@ -115,7 +120,7 @@ impl ShapeControlPointsIndex {
         &self,
         pos: Pos2,
         max_distance: f32,
-    ) -> Vec<(Pos2, usize)> {
+    ) -> Vec<(Pos2, ShapePointIndex)> {
         let not_nan_pos = not_nan_pos2(pos);
         let x_points = self
             .x_index
@@ -123,7 +128,7 @@ impl ShapeControlPointsIndex {
         let y_points = self
             .y_index
             .find_in_distance(not_nan_pos.1, not_nan_f32(max_distance));
-        let y_points_index: HashMap<usize, NotNan<f32>> = y_points
+        let y_points_index: HashMap<ShapePointIndex, NotNan<f32>> = y_points
             .flat_map(|(y, y_index_set)| y_index_set.iter().map(|index| (*index, *y)))
             .collect();
         x_points
@@ -138,14 +143,14 @@ impl ShapeControlPointsIndex {
             .collect()
     }
 
-    pub fn find_points_in_rect(&self, rect: &Rect) -> Vec<(Pos2, usize)> {
+    pub fn find_points_in_rect(&self, rect: &Rect) -> Vec<(Pos2, ShapePointIndex)> {
         let x_points = self
             .x_index
             .find_in_range(not_nan_f32(rect.left())..=not_nan_f32(rect.right()));
         let y_points = self
             .y_index
             .find_in_range(not_nan_f32(rect.top())..=not_nan_f32(rect.bottom()));
-        let y_points_index: HashMap<usize, NotNan<f32>> = y_points
+        let y_points_index: HashMap<ShapePointIndex, NotNan<f32>> = y_points
             .flat_map(|(y, y_index_set)| y_index_set.iter().map(|index| (*index, *y)))
             .collect();
         x_points
@@ -159,7 +164,7 @@ impl ShapeControlPointsIndex {
             .collect()
     }
 
-    pub fn find_position_by_index(&self, index: usize) -> Option<Pos2> {
+    pub fn find_position_by_index(&self, index: ShapePointIndex) -> Option<Pos2> {
         self.x_index
             .0
             .iter()
@@ -172,7 +177,12 @@ impl ShapeControlPointsIndex {
             })
     }
 
-    pub fn snap_point(&self, pos: Pos2, max_distance: f32, ignore: &HashSet<usize>) -> SnapPoint {
+    pub fn snap_point(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+        ignore: &HashSet<ShapePointIndex>,
+    ) -> SnapPoint {
         let x = self
             .x_index
             .find_closest_in_distance_and_ignore(

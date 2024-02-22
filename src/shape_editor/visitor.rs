@@ -6,7 +6,7 @@ use egui::epaint::{
     Shape, Stroke, TextShape,
 };
 use egui::Vec2;
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, SubAssign};
 
 pub trait ShapeVisitor<R = (), I: Default = usize> {
     fn line_segment(
@@ -73,27 +73,6 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
     }
 }
 
-pub fn visit_shape<R, I: Default>(
-    visitor: &mut impl ShapeVisitor<R, I>,
-    shape: &mut Shape,
-) -> Option<R> {
-    let mut index = I::default();
-    visit_shape_with_index(visitor, shape, &mut index)
-}
-
-pub(crate) fn visit_shape_with_index<R, I: Default>(
-    visitor: &mut impl ShapeVisitor<R, I>,
-    shape: &mut Shape,
-    index: &mut I,
-) -> Option<R> {
-    match shape {
-        Shape::Vec(vec) => vec
-            .iter_mut()
-            .find_map(|shape| visit_shape_with_index(visitor, shape, index)),
-        single_shape => visitor.single_shape(single_shape, index),
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 pub enum ShapeType {
     Circle,
@@ -107,16 +86,58 @@ pub enum ShapeType {
     Callback,
 }
 
-#[derive(Copy, Clone, Default, PartialEq)]
-pub struct ShapeControlPointIndex {
+#[derive(Copy, Clone, Default, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct ShapePointIndex {
     pub shape_index: usize,
     pub point_index: usize,
+}
+
+impl ShapePointIndex {
+    pub fn assign_prev_point(&mut self) {
+        self.point_index.sub_assign(1);
+    }
+
+    pub fn assign_next_point(&mut self) {
+        self.point_index.add_assign(1);
+    }
+
+    pub fn assign_next_shape(&mut self) {
+        self.shape_index.add_assign(1);
+        self.point_index = 0;
+    }
+
+    pub fn prev_point(&self) -> Self {
+        let mut slf = *self;
+        slf.assign_prev_point();
+        slf
+    }
+
+    pub fn next_point(&self) -> Self {
+        let mut slf = *self;
+        slf.assign_next_point();
+        slf
+    }
+
+    pub fn next_shape(&self) -> Self {
+        let mut slf = *self;
+        slf.assign_next_shape();
+        slf
+    }
+}
+
+impl From<(usize, usize)> for ShapePointIndex {
+    fn from(value: (usize, usize)) -> Self {
+        Self {
+            shape_index: value.0,
+            point_index: value.1,
+        }
+    }
 }
 
 pub trait IndexedShapeControlPointsVisitor<R = ()> {
     fn indexed_path_point(
         &mut self,
-        _index: ShapeControlPointIndex,
+        _index: ShapePointIndex,
         _point: &mut Pos2,
         _shape_type: ShapeType,
     ) -> Option<R> {
@@ -124,9 +145,9 @@ pub trait IndexedShapeControlPointsVisitor<R = ()> {
     }
     fn indexed_control_point(
         &mut self,
-        _index: ShapeControlPointIndex,
+        _index: ShapePointIndex,
         _control_point: &mut Pos2,
-        _connected_points: HashMap<usize, Pos2>,
+        _connected_points: HashMap<ShapePointIndex, Pos2>,
         _shape_type: ShapeType,
     ) -> Option<R> {
         None
@@ -201,29 +222,37 @@ pub trait IndexedShapesVisitor<R = ()> {
     }
 }
 
-#[derive(Clone)]
-pub struct CountShapeControlPoints;
+#[derive(Default)]
+pub struct LastShapePointIndex(Option<ShapePointIndex>);
 
-impl IndexedShapeControlPointsVisitor for CountShapeControlPoints {}
+impl LastShapePointIndex {
+    pub fn last_index(shape: &mut Shape) -> Option<ShapePointIndex> {
+        let mut visitor = Self::default();
+        IndexedShapeControlPointsVisitorAdapter(&mut visitor).visit(shape);
+        visitor.0
+    }
+}
 
-impl CountShapeControlPoints {
-    pub fn count(shape: &mut Shape) -> usize {
-        let mut count = ShapeControlPointIndex::default();
-        visit_shape_with_index(
-            &mut IndexedShapeControlPointsVisitorAdapter(&mut Self),
-            shape,
-            &mut count,
-        );
-        count.point_index
+impl IndexedShapeControlPointsVisitor for LastShapePointIndex {
+    fn indexed_path_point(
+        &mut self,
+        index: ShapePointIndex,
+        _point: &mut Pos2,
+        _shape_type: ShapeType,
+    ) -> Option<()> {
+        self.0.replace(index);
+        None
     }
 
-    pub fn last_index(shape: &mut Shape) -> Option<usize> {
-        let count = Self::count(shape);
-        if count > 0 {
-            Some(count - 1)
-        } else {
-            None
-        }
+    fn indexed_control_point(
+        &mut self,
+        index: ShapePointIndex,
+        _control_point: &mut Pos2,
+        _connected_points: HashMap<ShapePointIndex, Pos2>,
+        _shape_type: ShapeType,
+    ) -> Option<()> {
+        self.0.replace(index);
+        None
     }
 }
 
@@ -246,12 +275,12 @@ impl CountShapes {
 
 pub struct IndexedShapeControlPointsVisitorAdapter<'a, T>(pub &'a mut T);
 
-impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControlPointIndex>
+impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapePointIndex>
     for IndexedShapeControlPointsVisitorAdapter<'a, T>
 {
     fn line_segment(
         &mut self,
-        index: &mut ShapeControlPointIndex,
+        index: &mut ShapePointIndex,
         points: &mut [Pos2; 2],
         _stroke: &mut Stroke,
     ) -> Option<R> {
@@ -259,40 +288,36 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
             let result = self
                 .0
                 .indexed_path_point(*index, point, ShapeType::LineSegment);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         });
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn path(&mut self, index: &mut ShapeControlPointIndex, path: &mut PathShape) -> Option<R> {
+    fn path(&mut self, index: &mut ShapePointIndex, path: &mut PathShape) -> Option<R> {
         let result = path.points.iter_mut().find_map(|point| {
             let result = self.0.indexed_path_point(*index, point, ShapeType::Path);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         });
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn circle(
-        &mut self,
-        index: &mut ShapeControlPointIndex,
-        circle: &mut CircleShape,
-    ) -> Option<R> {
+    fn circle(&mut self, index: &mut ShapePointIndex, circle: &mut CircleShape) -> Option<R> {
         let result = {
             let result = self
                 .0
                 .indexed_path_point(*index, &mut circle.center, ShapeType::Circle);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         }
         .or_else(|| {
             let mut radius_point = circle
                 .center
                 .add(Vec2::angled(std::f32::consts::TAU / 8.0) * circle.radius);
-            let connected = HashMap::from_iter([(index.point_index - 1, circle.center)]);
+            let connected = HashMap::from_iter([(index.prev_point(), circle.center)]);
             let result = self.0.indexed_control_point(
                 *index,
                 &mut radius_point,
@@ -300,76 +325,73 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 ShapeType::Circle,
             );
             circle.radius = radius_point.distance(circle.center);
-            index.point_index.add_assign(1);
             result
         });
 
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn rect(&mut self, index: &mut ShapeControlPointIndex, rect: &mut RectShape) -> Option<R> {
+    fn rect(&mut self, index: &mut ShapePointIndex, rect: &mut RectShape) -> Option<R> {
         let result = {
             let result = self
                 .0
                 .indexed_path_point(*index, &mut rect.rect.min, ShapeType::Rect);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         }
         .or_else(|| {
             let result = self
                 .0
                 .indexed_path_point(*index, &mut rect.rect.max, ShapeType::Rect);
-            index.point_index.add_assign(1);
             result
         });
         rect.rect = normalize_rect(&rect.rect);
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn text(&mut self, index: &mut ShapeControlPointIndex, text: &mut TextShape) -> Option<R> {
+    fn text(&mut self, index: &mut ShapePointIndex, text: &mut TextShape) -> Option<R> {
         let result = self
             .0
             .indexed_path_point(*index, &mut text.pos, ShapeType::Text);
-        index.point_index.add_assign(1);
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn mesh(&mut self, index: &mut ShapeControlPointIndex, mesh: &mut Mesh) -> Option<R> {
+    fn mesh(&mut self, index: &mut ShapePointIndex, mesh: &mut Mesh) -> Option<R> {
         let result = mesh.vertices.iter_mut().find_map(|v| {
             let result = self
                 .0
                 .indexed_path_point(*index, &mut v.pos, ShapeType::Mesh);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         });
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn none(&mut self, index: &mut ShapeControlPointIndex) -> Option<R> {
-        index.shape_index.add_assign(1);
+    fn none(&mut self, index: &mut ShapePointIndex) -> Option<R> {
+        index.assign_next_shape();
         None
     }
 
     fn quadratic_bezier(
         &mut self,
-        index: &mut ShapeControlPointIndex,
+        index: &mut ShapePointIndex,
         b: &mut QuadraticBezierShape,
     ) -> Option<R> {
         let result = {
             let result =
                 self.0
                     .indexed_path_point(*index, &mut b.points[0], ShapeType::QuadraticBezier);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         }
         .or_else(|| {
             let connected = HashMap::from_iter([
-                (index.point_index - 1, b.points[0]),
-                (index.point_index + 1, b.points[2]),
+                (index.prev_point(), b.points[0]),
+                (index.next_point(), b.points[2]),
             ]);
             let result = self.0.indexed_control_point(
                 *index,
@@ -377,36 +399,31 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 connected,
                 ShapeType::QuadraticBezier,
             );
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         })
         .or_else(|| {
             let result =
                 self.0
                     .indexed_path_point(*index, &mut b.points[2], ShapeType::QuadraticBezier);
-            index.point_index.add_assign(1);
             result
         });
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
-    fn cubic_bezier(
-        &mut self,
-        index: &mut ShapeControlPointIndex,
-        b: &mut CubicBezierShape,
-    ) -> Option<R> {
+    fn cubic_bezier(&mut self, index: &mut ShapePointIndex, b: &mut CubicBezierShape) -> Option<R> {
         let result = {
             let result =
                 self.0
                     .indexed_path_point(*index, &mut b.points[0], ShapeType::CubicBezier);
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         }
         .or_else(|| {
             let connected = HashMap::from_iter([
-                (index.point_index - 1, b.points[0]),
-                (index.point_index + 1, b.points[2]),
+                (index.prev_point(), b.points[0]),
+                (index.next_point(), b.points[2]),
             ]);
             let result = self.0.indexed_control_point(
                 *index,
@@ -414,13 +431,13 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 connected,
                 ShapeType::CubicBezier,
             );
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         })
         .or_else(|| {
             let connected = HashMap::from_iter([
-                (index.point_index - 1, b.points[1]),
-                (index.point_index + 1, b.points[3]),
+                (index.prev_point(), b.points[1]),
+                (index.next_point(), b.points[3]),
             ]);
             let result = self.0.indexed_control_point(
                 *index,
@@ -428,26 +445,25 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapeControl
                 connected,
                 ShapeType::CubicBezier,
             );
-            index.point_index.add_assign(1);
+            index.assign_next_point();
             result
         })
         .or_else(|| {
             let result =
                 self.0
                     .indexed_path_point(*index, &mut b.points[3], ShapeType::CubicBezier);
-            index.point_index.add_assign(1);
             result
         });
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         result
     }
 
     fn paint_callback(
         &mut self,
-        index: &mut ShapeControlPointIndex,
+        index: &mut ShapePointIndex,
         _paint_callback: &mut PaintCallback,
     ) -> Option<R> {
-        index.shape_index.add_assign(1);
+        index.assign_next_shape();
         None
     }
 }
@@ -472,7 +488,7 @@ impl GetShapeTypeByPointIndex {
 impl IndexedShapeControlPointsVisitor<ShapeType> for GetShapeTypeByPointIndex {
     fn indexed_path_point(
         &mut self,
-        index: ShapeControlPointIndex,
+        index: ShapePointIndex,
         _point: &mut Pos2,
         shape_type: ShapeType,
     ) -> Option<ShapeType> {
@@ -481,11 +497,32 @@ impl IndexedShapeControlPointsVisitor<ShapeType> for GetShapeTypeByPointIndex {
 
     fn indexed_control_point(
         &mut self,
-        index: ShapeControlPointIndex,
+        index: ShapePointIndex,
         _control_point: &mut Pos2,
-        _connected_points: HashMap<usize, Pos2>,
+        _connected_points: HashMap<ShapePointIndex, Pos2>,
         shape_type: ShapeType,
     ) -> Option<ShapeType> {
         (index.point_index == self.0).then_some(shape_type)
+    }
+}
+
+pub fn visit_shape<R, I: Default>(
+    visitor: &mut impl ShapeVisitor<R, I>,
+    shape: &mut Shape,
+) -> Option<R> {
+    let mut index = I::default();
+    visit_shape_with_index(visitor, shape, &mut index)
+}
+
+fn visit_shape_with_index<R, I: Default>(
+    visitor: &mut impl ShapeVisitor<R, I>,
+    shape: &mut Shape,
+    index: &mut I,
+) -> Option<R> {
+    match shape {
+        Shape::Vec(vec) => vec
+            .iter_mut()
+            .find_map(|shape| visit_shape_with_index(visitor, shape, index)),
+        single_shape => visitor.single_shape(single_shape, index),
     }
 }

@@ -1,11 +1,12 @@
-use crate::shape_editor::index::ShapeControlPointsIndex;
+use crate::shape_editor::index::{ShapeControlPointsIndex, SnapPoint};
 use crate::shape_editor::style;
 use crate::shape_editor::visitor::{
-    IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter,
-    ShapeControlPointIndex, ShapeType, ShapeVisitor,
+    IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter, ShapePointIndex,
+    ShapeType, ShapeVisitor,
 };
-use egui::ahash::HashMap;
-use egui::{Color32, Pos2, Shape, Stroke};
+use egui::ahash::{HashMap, HashSet};
+use egui::{Color32, Pos2, Rect, Shape, Stroke};
+use std::collections::hash_map::Iter;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ShapeControlPoint {
@@ -16,8 +17,15 @@ pub enum ShapeControlPoint {
     ControlPoint {
         position: Pos2,
         shape_index: usize,
-        connected_points: HashMap<usize, Pos2>,
+        connected_points: HashMap<ShapePointIndex, Pos2>,
     },
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum PointRemovingStrategy {
+    ControlPoint,
+    Shape,
+    None,
 }
 
 impl ShapeControlPoint {
@@ -81,9 +89,9 @@ impl ShapeControlPoint {
 
 #[derive(Default, Clone, Debug)]
 pub struct ShapeControlPoints {
-    pub control_points: Vec<ShapeControlPoint>,
-    pub shapes: HashMap<usize, ShapeType>,
-    pub index: ShapeControlPointsIndex,
+    control_points: HashMap<ShapePointIndex, ShapeControlPoint>,
+    shapes: HashMap<usize, ShapeType>,
+    index: ShapeControlPointsIndex,
 }
 
 impl ShapeControlPoints {
@@ -93,16 +101,36 @@ impl ShapeControlPoints {
         slf
     }
 
-    pub fn points_in_radius(&self, pos: Pos2, radius: f32) -> HashMap<usize, ShapeControlPoint> {
+    pub fn snap_point(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+        ignore: &HashSet<ShapePointIndex>,
+    ) -> SnapPoint {
+        self.index.snap_point(pos, max_distance, ignore)
+    }
+
+    pub fn points_in_radius(
+        &self,
+        pos: Pos2,
+        radius: f32,
+    ) -> HashMap<ShapePointIndex, ShapeControlPoint> {
         self.index
             .find_points_in_distance(pos, radius)
             .iter()
-            .map(|(_, index)| (*index, self.control_points[*index].clone()))
+            .map(|(_, index)| (*index, self.control_points[index].clone()))
             .collect()
     }
 
-    pub fn connected_bezier_control_point(&self, path_point_index: usize) -> Option<Pos2> {
-        self.control_points.iter().find_map(|point| {
+    pub fn find_points_in_rect(&self, rect: &Rect) -> Vec<(Pos2, ShapePointIndex)> {
+        self.index.find_points_in_rect(rect)
+    }
+
+    pub fn connected_bezier_control_point(
+        &self,
+        path_point_index: &ShapePointIndex,
+    ) -> Option<Pos2> {
+        self.control_points.values().find_map(|point| {
             if let ShapeControlPoint::ControlPoint {
                 position,
                 connected_points,
@@ -110,7 +138,7 @@ impl ShapeControlPoints {
             } = point
             {
                 connected_points
-                    .contains_key(&path_point_index)
+                    .contains_key(path_point_index)
                     .then_some(*position)
             } else {
                 None
@@ -118,19 +146,35 @@ impl ShapeControlPoints {
         })
     }
 
-    pub fn by_index(&self, index: usize) -> Option<&ShapeControlPoint> {
+    pub fn by_index(&self, index: &ShapePointIndex) -> Option<&ShapeControlPoint> {
         self.control_points.get(index)
     }
 
-    pub fn pos_by_index(&self, index: usize) -> Option<Pos2> {
+    pub fn by_shape_index(&self, shape_index: usize) -> HashSet<usize> {
+        self.control_points
+            .values()
+            .enumerate()
+            .filter_map(|(index, point)| (point.shape_index() == shape_index).then_some(index))
+            .collect()
+    }
+
+    pub fn pos_by_index(&self, index: &ShapePointIndex) -> Option<Pos2> {
         self.by_index(index).map(|p| p.position())
     }
 
-    pub fn shape_type_by_control_point(&self, index: usize) -> Option<ShapeType> {
+    pub fn shape_type_by_control_point(&self, index: &ShapePointIndex) -> Option<ShapeType> {
         self.control_points
             .get(index)
             .and_then(|point| self.shapes.get(&point.shape_index()))
             .cloned()
+    }
+
+    pub fn shape_by_index(&self, shape_index: usize) -> Option<ShapeType> {
+        self.shapes.get(&shape_index).cloned()
+    }
+
+    pub fn iter(&self) -> Iter<ShapePointIndex, ShapeControlPoint> {
+        self.control_points.iter()
     }
 }
 
@@ -140,46 +184,42 @@ impl PartialEq for ShapeControlPoints {
     }
 }
 
-impl IntoIterator for ShapeControlPoints {
-    type Item = ShapeControlPoint;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.control_points.into_iter()
-    }
-}
-
 impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
     fn indexed_path_point(
         &mut self,
-        index: ShapeControlPointIndex,
+        index: ShapePointIndex,
         point: &mut Pos2,
         shape_type: ShapeType,
     ) -> Option<()> {
-        self.control_points.push(ShapeControlPoint::PathPoint {
-            position: *point,
-            shape_index: index.shape_index,
-        });
+        self.control_points.insert(
+            index,
+            ShapeControlPoint::PathPoint {
+                position: *point,
+                shape_index: index.shape_index,
+            },
+        );
         self.shapes.insert(index.shape_index, shape_type);
-        self.index.insert(*point, self.control_points.len() - 1);
+        self.index.insert(*point, index);
         None
     }
 
     fn indexed_control_point(
         &mut self,
-        index: ShapeControlPointIndex,
+        index: ShapePointIndex,
         control_point: &mut Pos2,
-        connected_points: HashMap<usize, Pos2>,
+        connected_points: HashMap<ShapePointIndex, Pos2>,
         shape_type: ShapeType,
     ) -> Option<()> {
-        self.control_points.push(ShapeControlPoint::ControlPoint {
-            position: *control_point,
-            shape_index: index.shape_index,
-            connected_points,
-        });
+        self.control_points.insert(
+            index,
+            ShapeControlPoint::ControlPoint {
+                position: *control_point,
+                shape_index: index.shape_index,
+                connected_points,
+            },
+        );
         self.shapes.insert(index.shape_index, shape_type);
-        self.index
-            .insert(*control_point, self.control_points.len() - 1);
+        self.index.insert(*control_point, index);
         None
     }
 }

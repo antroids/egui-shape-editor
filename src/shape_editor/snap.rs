@@ -26,10 +26,10 @@ impl SnapInfo {
         memory: &ShapeEditorMemory,
         max_distance: f32,
     ) {
-        let control_point_snap = memory.shape_control_points.index.snap_point(
+        let control_point_snap = memory.shape_control_points.snap_point(
             pos,
             max_distance,
-            &memory.selection.control_points,
+            &memory.selection.control_points(),
         );
         let mut ignored_grid_line_types = HashSet::with_capacity(1);
         ignored_grid_line_types.insert(GridLineType::Sub);
@@ -44,7 +44,7 @@ impl SnapInfo {
                 self.targets.extend(index_set.iter().filter_map(|index| {
                     memory
                         .shape_control_points
-                        .pos_by_index(*index)
+                        .pos_by_index(index)
                         .map(SnapTarget::ShapeControlPoint)
                 }));
                 Some(x)
@@ -61,7 +61,7 @@ impl SnapInfo {
                         self.targets.extend(index_set.iter().filter_map(|index| {
                             memory
                                 .shape_control_points
-                                .pos_by_index(*index)
+                                .pos_by_index(index)
                                 .map(SnapTarget::ShapeControlPoint)
                         }));
                         Some(px)
@@ -70,7 +70,7 @@ impl SnapInfo {
                         self.targets.extend(index_set.iter().filter_map(|index| {
                             memory
                                 .shape_control_points
-                                .pos_by_index(*index)
+                                .pos_by_index(index)
                                 .map(SnapTarget::ShapeControlPoint)
                         }));
                         self.targets.push(SnapTarget::GridHorizontal(gx));
@@ -89,7 +89,7 @@ impl SnapInfo {
                 self.targets.extend(index_set.iter().filter_map(|index| {
                     memory
                         .shape_control_points
-                        .pos_by_index(*index)
+                        .pos_by_index(index)
                         .map(SnapTarget::ShapeControlPoint)
                 }));
                 Some(y)
@@ -106,7 +106,7 @@ impl SnapInfo {
                         self.targets.extend(index_set.iter().filter_map(|index| {
                             memory
                                 .shape_control_points
-                                .pos_by_index(*index)
+                                .pos_by_index(index)
                                 .map(SnapTarget::ShapeControlPoint)
                         }));
                         Some(py)
@@ -115,7 +115,7 @@ impl SnapInfo {
                         self.targets.extend(index_set.iter().filter_map(|index| {
                             memory
                                 .shape_control_points
-                                .pos_by_index(*index)
+                                .pos_by_index(index)
                                 .map(SnapTarget::ShapeControlPoint)
                         }));
                         self.targets.push(SnapTarget::GridVertical(gy));

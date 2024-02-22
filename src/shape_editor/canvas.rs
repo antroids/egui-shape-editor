@@ -1,16 +1,21 @@
 use crate::shape_editor::action::{InsertShape, ShapeAction};
-use crate::shape_editor::{grid, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory, ShapeEditorOptions, style, utils};
+use crate::shape_editor::{
+    grid, style, utils, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory,
+    ShapeEditorOptions,
+};
 
 use super::transform::Transform;
 use crate::shape_editor::action::MoveShapeControlPoints;
 use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
-use crate::shape_editor::visitor::{CountShapeControlPoints, ShapeType};
+use crate::shape_editor::visitor::{LastShapePointIndex, ShapePointIndex, ShapeType};
 use egui::ahash::HashMap;
 use egui::{
-    Color32, Context, Modifiers, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
+    Color32, Context, Key, KeyboardShortcut, Modifiers, Painter, Pos2, Rect, Response, Sense,
+    Shape, Stroke, Ui, Vec2,
 };
+use itertools::Itertools;
 use std::ops::Mul;
 
 pub(crate) struct ActionModifier(Modifiers);
@@ -160,7 +165,57 @@ impl<'a> ShapeEditor<'a> {
         ctx.painter
             .rect(canvas_rect, 0.0, self.style.canvas_bg_color(), Stroke::NONE);
 
-        if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked {
+        if ui.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::Delete))
+        }) {
+            let selected_by_shape = memory
+                .selection
+                .control_points()
+                .iter()
+                .filter_map(|index| {
+                    memory
+                        .shape_control_points
+                        .by_index(index)
+                        .map(|control_point| (control_point.shape_index(), *index))
+                })
+                .into_group_map();
+            let mut actions: Vec<Box<dyn ShapeAction>> = Vec::new();
+            for (selected_shape, selected_shape_points) in selected_by_shape {
+                if let Some(shape_type) = memory.shape_control_points.shape_by_index(selected_shape)
+                {
+                    let shape_points = memory.shape_control_points.by_shape_index(selected_shape);
+                    match shape_type {
+                        ShapeType::Path => {
+                            memory
+                                .selection
+                                .deselect_control_points(&selected_shape_points);
+                            if selected_shape_points.len() > shape_points.len() - 2 {
+                                // delete shape
+                            } else {
+                                // delete points
+                            }
+                        }
+                        ShapeType::Mesh => {
+                            memory
+                                .selection
+                                .deselect_control_points(&selected_shape_points);
+                            if selected_shape_points.len() > shape_points.len() - 3 {
+                                // delete shape
+                            } else {
+                                // delete points
+                            }
+                        }
+                        _ => {
+                            memory
+                                .selection
+                                .deselect_control_points(&selected_shape_points);
+                            // delete shape
+                        }
+                    }
+                }
+            }
+        } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
+        {
             if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
                 self.handle_add_point(
                     memory,
@@ -254,7 +309,7 @@ impl<'a> ShapeEditor<'a> {
                         ),
                         memory,
                     );
-                    if let Some(last_index) = CountShapeControlPoints::last_index(self.shape) {
+                    if let Some(last_index) = LastShapePointIndex::last_index(self.shape) {
                         memory.selection.select_single_control_point(last_index);
                     }
                 }
@@ -271,7 +326,7 @@ impl<'a> ShapeEditor<'a> {
                         ),
                         memory,
                     );
-                    if let Some(last_index) = CountShapeControlPoints::last_index(self.shape) {
+                    if let Some(last_index) = LastShapePointIndex::last_index(self.shape) {
                         memory.selection.select_single_control_point(last_index);
                     }
                 }
@@ -340,7 +395,7 @@ fn handle_drag_in_progress(
                     .snap_point
                     .unwrap_or(ctx.input.canvas_content_mouse_pos);
                 Box::new(MoveShapeControlPoints::from_index_and_translation(
-                    &memory.selection.control_points,
+                    memory.selection.control_points(),
                     &(snap_point - *pos),
                 ))
                 .apply(shape);
@@ -353,7 +408,6 @@ fn handle_drag_in_progress(
             }
             memory
                 .shape_control_points
-                .index
                 .find_points_in_rect(
                     &ctx.transform
                         .ui_to_canvas_content
@@ -382,7 +436,7 @@ fn handle_drag_released(memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
             if pos != start_pos && memory.selection.has_control_points() {
                 memory.action_history.push(Box::new(
                     MoveShapeControlPoints::from_index_and_translation(
-                        &memory.selection.control_points,
+                        memory.selection.control_points(),
                         &(pos - start_pos),
                     )
                     .invert(),
@@ -427,7 +481,7 @@ fn handle_scroll_and_zoom(
 
 fn handle_primary_pressed(
     ctx: &CanvasContext,
-    hovered_ui_shape_points: &HashMap<usize, ShapeControlPoint>,
+    hovered_ui_shape_points: &HashMap<ShapePointIndex, ShapeControlPoint>,
     memory: &mut ShapeEditorMemory,
 ) {
     if ctx.input.canvas_mouse_hover_pos.is_some()
@@ -441,7 +495,7 @@ fn handle_primary_pressed(
                 .and_then(|single_selected_index| {
                     hovered_ui_shape_points
                         .keys()
-                        .skip_while(|hovered_index| **hovered_index != single_selected_index)
+                        .skip_while(|hovered_index| **hovered_index != *single_selected_index)
                         .skip(1)
                         .next()
                         .copied()
@@ -449,9 +503,9 @@ fn handle_primary_pressed(
         if !(ctx.input.action_modifier.do_not_deselect_selected_points()
             || ctx.input.action_modifier.add_point_on_click()
             || ctx.input.drag_started
-                && hovered_ui_shape_points.keys().any(|hovered_index| {
-                    memory.selection.is_control_point_selected(*hovered_index)
-                }))
+                && hovered_ui_shape_points
+                    .keys()
+                    .any(|hovered_index| memory.selection.is_control_point_selected(hovered_index)))
         {
             memory.selection.clear_selected_control_points();
         }
@@ -478,10 +532,13 @@ fn paint_shape_control_points(
     ctx: &CanvasContext,
     memory: &ShapeEditorMemory,
     style: &dyn style::Style,
-    hovered: &HashMap<usize, ShapeControlPoint>,
+    hovered: &HashMap<ShapePointIndex, ShapeControlPoint>,
 ) {
-    for (index, ui_shape_point) in ui_shape_control_points.control_points.iter().enumerate() {
-        let hovered = hovered.contains_key(&index);
+    for (index, ui_shape_point) in ui_shape_control_points
+        .iter()
+        .sorted_by(|(k1, _), (k2, _)| k1.cmp(k2))
+    {
+        let hovered = hovered.contains_key(index);
         let selected = memory.selection.is_control_point_selected(index);
         ctx.painter
             .add(ui_shape_point.to_shape(hovered, selected, style));

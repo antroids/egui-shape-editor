@@ -1,6 +1,6 @@
 use crate::shape_editor::action::InsertShape;
 use crate::shape_editor::canvas::CanvasContext;
-use crate::shape_editor::visitor::CountShapeControlPoints;
+use crate::shape_editor::visitor::LastShapePointIndex;
 use crate::shape_editor::{MouseDrag, ShapeEditor, ShapeEditorMemory};
 use egui::epaint::CircleShape;
 use egui::{Response, Shape};
@@ -88,7 +88,7 @@ impl<'a> ShapeEditor<'a> {
     }
 
     fn place_last_shape_point(&mut self, memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
-        if let Some(index) = CountShapeControlPoints::last_index(self.shape) {
+        if let Some(index) = LastShapePointIndex::last_index(self.shape) {
             let point = ctx.input.canvas_content_mouse_pos;
             memory.selection.select_single_control_point(index);
             memory.mouse_drag = Some(MouseDrag::MoveShapeControlPoints(point, point));

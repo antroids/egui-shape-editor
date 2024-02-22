@@ -1,5 +1,6 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::index::GridIndex;
+use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::HashSet;
 use egui::{
@@ -63,37 +64,47 @@ enum MouseDrag {
 
 #[derive(Clone, Default)]
 pub struct Selection {
-    pub control_points: HashSet<usize>,
+    control_points: HashSet<ShapePointIndex>,
 }
 
 impl Selection {
-    fn has_control_points(&self) -> bool {
+    pub fn has_control_points(&self) -> bool {
         !self.control_points.is_empty()
     }
 
-    fn select_control_point(&mut self, index: usize) {
+    pub fn select_control_point(&mut self, index: ShapePointIndex) {
         self.control_points.insert(index);
     }
 
-    fn select_single_control_point(&mut self, index: usize) {
+    pub fn select_single_control_point(&mut self, index: ShapePointIndex) {
         self.clear_selected_control_points();
         self.select_control_point(index);
     }
 
-    fn is_control_point_selected(&self, index: usize) -> bool {
-        self.control_points.contains(&index)
+    pub fn is_control_point_selected(&self, index: &ShapePointIndex) -> bool {
+        self.control_points.contains(index)
     }
 
-    fn clear_selected_control_points(&mut self) {
+    pub fn clear_selected_control_points(&mut self) {
         self.control_points.clear();
     }
 
-    fn single_control_point(&self) -> Option<usize> {
+    pub fn single_control_point(&self) -> Option<&ShapePointIndex> {
         if self.control_points.len() == 1 {
-            self.control_points.iter().next().copied()
+            self.control_points.iter().next()
         } else {
             None
         }
+    }
+
+    pub fn control_points(&self) -> &HashSet<ShapePointIndex> {
+        &self.control_points
+    }
+
+    pub fn deselect_control_points(&mut self, control_points: &[ShapePointIndex]) {
+        control_points.iter().for_each(|index| {
+            self.control_points.remove(index);
+        });
     }
 }
 
@@ -141,9 +152,7 @@ impl ShapeEditorMemory {
 
     fn closest_selected_control_point(&self, pos: Pos2) -> Option<&ShapeControlPoint> {
         self.shape_control_points
-            .control_points
             .iter()
-            .enumerate()
             .filter_map(|(index, point)| {
                 self.selection
                     .is_control_point_selected(index)
