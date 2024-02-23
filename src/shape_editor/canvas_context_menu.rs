@@ -77,7 +77,7 @@ impl<'a> ShapeEditor<'a> {
             if let Some(last_action_name) = memory
                 .action_history
                 .last()
-                .map(|action| action.short_name())
+                .map(|(_, short_name)| short_name)
             {
                 if ui.button(format!("Undo '{}'", last_action_name)).clicked() {
                     memory.undo(self.shape);

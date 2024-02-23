@@ -1,4 +1,6 @@
-use crate::shape_editor::action::{AddShapePoints, InsertShape, ShapeAction, ShapePoint};
+use crate::shape_editor::action::{
+    AddShapePoints, InsertShape, RemoveShapePoints, ShapeAction, ShapePoint,
+};
 use crate::shape_editor::{
     grid, style, utils, MouseDrag, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory,
     ShapeEditorOptions,
@@ -17,6 +19,8 @@ use egui::{
 };
 use itertools::Itertools;
 use std::ops::Mul;
+use strum::EnumIter;
+use strum::IntoEnumIterator;
 
 pub(crate) struct ActionModifier(Modifiers);
 
@@ -63,6 +67,28 @@ impl CanvasTransform {
     }
 }
 
+#[derive(Clone, Copy, EnumIter, PartialEq, Eq, Hash)]
+pub enum KeyboardAction {
+    AddPoint,
+    DeletePoint,
+    Undo,
+}
+
+impl KeyboardAction {
+    const SHORTCUT_ADD_POINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::I);
+    const SHORTCUT_DELETE_POINT: KeyboardShortcut =
+        KeyboardShortcut::new(Modifiers::NONE, Key::Delete);
+    const SHORTCUT_UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::Z);
+
+    fn default_keyboard_shortcut(&self) -> &KeyboardShortcut {
+        match self {
+            KeyboardAction::AddPoint => &Self::SHORTCUT_ADD_POINT,
+            KeyboardAction::DeletePoint => &Self::SHORTCUT_DELETE_POINT,
+            KeyboardAction::Undo => &Self::SHORTCUT_UNDO,
+        }
+    }
+}
+
 pub(crate) struct CanvasInput {
     pub mouse_hover_pos: Option<Pos2>,
     pub mouse_pos: Pos2,
@@ -74,10 +100,12 @@ pub(crate) struct CanvasInput {
     pub drag_started: bool,
     pub drag_released: bool,
     pub action_modifier: ActionModifier,
+    pub keyboard_action: Option<KeyboardAction>,
 }
 
 impl CanvasInput {
     fn new(
+        options: &ShapeEditorOptions,
         response: &Response,
         ui: &Ui,
         transform: &CanvasTransform,
@@ -93,12 +121,21 @@ impl CanvasInput {
             mouse_secondary_pressed,
             action_modifier,
             mouse_primary_clicked,
-        ) = ui.input(|input| {
+            canvas_action,
+        ) = ui.input_mut(|input| {
             (
                 input.pointer.primary_pressed(),
                 input.pointer.secondary_pressed(),
                 ActionModifier(input.modifiers),
                 input.pointer.primary_clicked(),
+                KeyboardAction::iter().find(|canvas_action| {
+                    input.consume_shortcut(
+                        options
+                            .keyboard_shortcuts
+                            .get(canvas_action)
+                            .unwrap_or(canvas_action.default_keyboard_shortcut()),
+                    )
+                }),
             )
         });
         let drag_started = response.drag_started();
@@ -115,6 +152,7 @@ impl CanvasInput {
             action_modifier,
             drag_started,
             drag_released,
+            keyboard_action: canvas_action,
         }
     }
 
@@ -134,9 +172,21 @@ pub(crate) struct CanvasContext {
 }
 
 impl CanvasContext {
-    fn new(canvas_rect: Rect, memory: &ShapeEditorMemory, response: &Response, ui: &Ui) -> Self {
+    fn new(
+        canvas_rect: Rect,
+        options: &ShapeEditorOptions,
+        memory: &ShapeEditorMemory,
+        response: &Response,
+        ui: &Ui,
+    ) -> Self {
         let transform = CanvasTransform::new(canvas_rect, &memory.transform);
-        let input = CanvasInput::new(response, ui, &transform, memory.last_mouse_hover_pos);
+        let input = CanvasInput::new(
+            options,
+            response,
+            ui,
+            &transform,
+            memory.last_mouse_hover_pos,
+        );
         let painter = ui.painter_at(canvas_rect);
         Self {
             transform,
@@ -157,7 +207,7 @@ impl<'a> ShapeEditor<'a> {
         let margins = self.style.rulers_margins();
         let canvas_rect = margins.shrink_rect(outer_rect);
         let response = ui.allocate_rect(canvas_rect, Sense::drag());
-        let mut ctx = CanvasContext::new(canvas_rect, memory, &response, ui);
+        let mut ctx = CanvasContext::new(canvas_rect, &self.options, memory, &response, ui);
         let mut snap_info = SnapInfo::default();
 
         self.canvas_context_menu(response.clone(), memory, &ctx);
@@ -165,66 +215,7 @@ impl<'a> ShapeEditor<'a> {
         ctx.painter
             .rect(canvas_rect, 0.0, self.style.canvas_bg_color(), Stroke::NONE);
 
-        if ui.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::Delete))
-        }) {
-            let selected_by_shape = memory
-                .selection
-                .control_points()
-                .iter()
-                .filter_map(|index| {
-                    memory
-                        .shape_control_points
-                        .by_index(index)
-                        .map(|control_point| (control_point.shape_index(), *index))
-                })
-                .into_group_map();
-            let mut actions: Vec<Box<dyn ShapeAction>> = Vec::new();
-            for (selected_shape, selected_shape_points) in selected_by_shape {
-                if let Some(shape_type) = memory.shape_control_points.shape_by_index(selected_shape)
-                {
-                    let shape_points = memory.shape_control_points.by_shape_index(selected_shape);
-                    match shape_type {
-                        ShapeType::Path => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            if selected_shape_points.len() > shape_points.len() - 2 {
-                                // delete shape
-                            } else {
-                                // delete points
-                            }
-                        }
-                        ShapeType::Mesh => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            if selected_shape_points.len() > shape_points.len() - 3 {
-                                // delete shape
-                            } else {
-                                // delete points
-                            }
-                        }
-                        _ => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            // delete shape
-                        }
-                    }
-                }
-            }
-        } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
-        {
-            if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
-                self.handle_add_point(
-                    memory,
-                    ctx.transform
-                        .ui_to_canvas_content
-                        .transform_pos(mouse_hover_pos),
-                );
-            }
-        }
+        self.handle_actions(memory, &ctx);
 
         update_snap_point(&mut snap_info, &ctx, memory, &self.options);
         handle_drag_in_progress(memory, self.shape, self.style, &ctx, &mut snap_info);
@@ -276,6 +267,33 @@ impl<'a> ShapeEditor<'a> {
         ShapeEditorCanvasResponse { response }
     }
 
+    fn handle_actions(&mut self, memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
+        if let Some(keyboard_action) = ctx.input.keyboard_action {
+            match keyboard_action {
+                KeyboardAction::AddPoint => self.handle_add_point(memory, ctx.input.mouse_pos),
+                KeyboardAction::DeletePoint => {
+                    self.apply_action(
+                        RemoveShapePoints(memory.selection.control_points().clone()),
+                        memory,
+                    );
+                }
+                KeyboardAction::Undo => {
+                    memory.undo(self.shape);
+                }
+            }
+        } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
+        {
+            if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
+                self.handle_add_point(
+                    memory,
+                    ctx.transform
+                        .ui_to_canvas_content
+                        .transform_pos(mouse_hover_pos),
+                );
+            }
+        }
+    }
+
     fn handle_add_point(&mut self, memory: &mut ShapeEditorMemory, mouse_pos: Pos2) {
         let Some(selected_point) = memory.selection.single_control_point() else {
             return;
@@ -291,6 +309,10 @@ impl<'a> ShapeEditor<'a> {
             .shape_control_points
             .shape_type_by_control_point(selected_point)
         {
+            println!(
+                "Add point to shape {:?} from selected {:?}",
+                shape_type, selected_point
+            );
             match shape_type {
                 ShapeType::Circle => {}
                 ShapeType::LineSegment => {}
@@ -445,13 +467,12 @@ fn handle_drag_released(memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
     if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
         if let Some(MouseDrag::MoveShapeControlPoints(start_pos, pos)) = memory.mouse_drag.take() {
             if pos != start_pos && memory.selection.has_control_points() {
-                memory.action_history.push(Box::new(
-                    MoveShapeControlPoints::from_index_and_translation(
-                        memory.selection.control_points(),
-                        &(pos - start_pos),
-                    )
-                    .invert(),
-                ));
+                let move_action = MoveShapeControlPoints::from_index_and_translation(
+                    memory.selection.control_points(),
+                    &(pos - start_pos),
+                );
+                memory
+                    .push_action_history(Box::new(move_action.invert()), move_action.short_name());
             }
         }
     }
