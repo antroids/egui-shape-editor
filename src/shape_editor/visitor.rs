@@ -51,7 +51,7 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
 
     fn single_shape(&mut self, shape: &mut Shape, index: &mut I) -> Option<R> {
         match shape {
-            Shape::Noop => None,
+            Shape::Noop => self.none(index),
             Shape::Vec(_) => None,
             Shape::Circle(circle) => self.circle(index, circle),
             Shape::LineSegment { points, stroke } => self.line_segment(index, points, stroke),
@@ -73,7 +73,7 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ShapeType {
     Circle,
     LineSegment,

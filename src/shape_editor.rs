@@ -1,8 +1,10 @@
 use crate::shape_editor::action::ShapeAction;
+use crate::shape_editor::canvas::KeyboardAction;
 use crate::shape_editor::index::GridIndex;
+use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
-use egui::ahash::HashSet;
+use egui::ahash::{HashMap, HashSet};
 use egui::{
     Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rect, Response, Sense, Shape,
     Stroke, Ui, Vec2,
@@ -39,6 +41,7 @@ pub struct ShapeEditorOptions {
     pub stroke: Stroke,
     pub snap_distance: f32,
     pub snap_enabled: bool,
+    pub keyboard_shortcuts: HashMap<KeyboardAction, KeyboardShortcut>,
 }
 
 impl Default for ShapeEditorOptions {
@@ -51,6 +54,7 @@ impl Default for ShapeEditorOptions {
             stroke: Stroke::new(1.0, Color32::BLACK),
             snap_distance: 5.0,
             snap_enabled: true,
+            keyboard_shortcuts: Default::default(),
         }
     }
 }
@@ -114,23 +118,25 @@ pub struct ShapeEditorMemory {
     shape_control_points: ShapeControlPoints,
     grid: Option<GridIndex>,
     mouse_drag: Option<MouseDrag>,
-    action_history: Vec<Box<dyn ShapeAction>>,
+    action_history: Vec<(Box<dyn ShapeAction>, String)>,
     last_mouse_hover_pos: Pos2,
     last_canvas_mouse_hover_pos: Pos2,
     selection: Selection,
+    snap: SnapInfo,
 }
 
 impl Default for ShapeEditorMemory {
     fn default() -> Self {
         Self {
-            transform: Transform::default(),
+            transform: Default::default(),
             shape_control_points: Default::default(),
             grid: None,
             mouse_drag: None,
             action_history: Vec::new(),
             last_mouse_hover_pos: Pos2::ZERO,
             last_canvas_mouse_hover_pos: Pos2::ZERO,
-            selection: Selection::default(),
+            selection: Default::default(),
+            snap: Default::default(),
         }
     }
 }
@@ -144,8 +150,17 @@ impl ShapeEditorMemory {
         ctx.data_mut(|data| data.insert_temp(id, self))
     }
 
+    fn apply_boxed_action(&mut self, action: Box<dyn ShapeAction>, shape: &mut Shape) {
+        let short_name = action.short_name();
+        self.push_action_history(action.apply(shape), short_name)
+    }
+
+    fn push_action_history(&mut self, action: Box<dyn ShapeAction>, short_name: String) {
+        self.action_history.push((action, short_name))
+    }
+
     fn undo(&mut self, shape: &mut Shape) {
-        if let Some(action) = self.action_history.pop() {
+        if let Some((action, _)) = self.action_history.pop() {
             action.apply(shape);
         }
     }
@@ -187,19 +202,17 @@ impl<'a> ShapeEditor<'a> {
         let ui_painter = ui.painter();
         rulers::paint_rulers(self.style, ui_painter, outer_rect, &memory);
 
-        if ui.input_mut(|input| input.consume_shortcut(&self.options.undo_shortcut)) {
-            memory.undo(self.shape);
-        }
-
         memory.store(ctx, self.id);
 
         ShapeEditorResponse { response }
     }
 
-    fn apply_action(&mut self, action: impl ShapeAction, memory: &mut ShapeEditorMemory) {
-        memory
-            .action_history
-            .push(Box::new(action).apply(self.shape))
+    fn apply_action(&mut self, action: impl ShapeAction + 'static, memory: &mut ShapeEditorMemory) {
+        self.apply_boxed_action(Box::new(action), memory)
+    }
+
+    fn apply_boxed_action(&mut self, action: Box<dyn ShapeAction>, memory: &mut ShapeEditorMemory) {
+        memory.apply_boxed_action(action, self.shape);
     }
 }
 

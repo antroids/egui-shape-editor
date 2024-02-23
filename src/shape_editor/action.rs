@@ -1,3 +1,4 @@
+use crate::shape_editor::utils::map_grouped_by;
 use crate::shape_editor::visitor::{
     CountShapes, IndexedShapeControlPointsVisitor, ShapePointIndex, ShapeType, ShapeVisitor,
 };
@@ -8,8 +9,9 @@ use dyn_clone::DynClone;
 use egui::ahash::{HashMap, HashSet};
 use egui::emath::Pos2;
 use egui::epaint::{CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
-use egui::{Color32, Rect, Shape, Stroke, Vec2};
+use egui::{Color32, Mesh, Rect, Shape, Stroke, Vec2};
 use itertools::Itertools;
+use std::mem;
 use std::ops::{AddAssign, DerefMut, Neg};
 
 pub trait ShapeAction: DynClone + Send + Sync {
@@ -40,10 +42,13 @@ impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
         &mut self,
         index: ShapePointIndex,
         point: &mut Pos2,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         if let Some(translation) = self.0.remove(&index) {
             point.add_assign(translation);
+            if shape_type == ShapeType::Circle {
+                self.0.remove(&index.next_point());
+            }
         }
         if self.0.is_empty() {
             Some(())
@@ -57,10 +62,12 @@ impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
         index: ShapePointIndex,
         control_point: &mut Pos2,
         _connected_points: HashMap<ShapePointIndex, Pos2>,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         if let Some(translation) = self.0.remove(&index) {
-            control_point.add_assign(translation);
+            if shape_type != ShapeType::Circle || !self.0.contains_key(&index.prev_point()) {
+                control_point.add_assign(translation);
+            }
         }
         if self.0.is_empty() {
             Some(())
@@ -105,8 +112,8 @@ impl ShapeAction for MoveShapeControlPoints {
 
 #[derive(Clone)]
 pub struct InsertShape {
-    pub(crate) shape: Option<Shape>,
-    pub(crate) replace: Option<usize>,
+    shape: Option<Shape>,
+    replace: Option<usize>,
 }
 
 impl InsertShape {
@@ -114,6 +121,20 @@ impl InsertShape {
         Self {
             shape: Some(shape),
             replace: None,
+        }
+    }
+
+    pub fn replace_by_noop(index: usize) -> Self {
+        Self {
+            shape: None,
+            replace: Some(index),
+        }
+    }
+
+    pub fn replace_by_shape(index: usize, shape: Shape) -> Self {
+        Self {
+            shape: Some(shape),
+            replace: Some(index),
         }
     }
 
@@ -190,6 +211,33 @@ impl InsertShape {
     pub fn rect_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
         Shape::rect_stroke(Rect::from_two_pos(start_point, end_point), 0.0, stroke).into()
     }
+
+    pub fn mesh_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
+        let mut mesh = Mesh::default();
+        let third_point = start_point + (start_point - end_point).rot90();
+        let first_vertex_index = mesh.vertices.len() as u32;
+        mesh.vertices.push(Vertex {
+            pos: start_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.vertices.push(Vertex {
+            pos: end_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.vertices.push(Vertex {
+            pos: third_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.add_triangle(
+            first_vertex_index,
+            first_vertex_index + 1,
+            first_vertex_index + 2,
+        );
+        Shape::mesh(mesh).into()
+    }
 }
 
 impl From<Shape> for InsertShape {
@@ -198,47 +246,109 @@ impl From<Shape> for InsertShape {
     }
 }
 
-impl IndexedShapesVisitor<Shape> for InsertShape {
-    fn indexed_single_shape(&mut self, index: usize, shape: &mut Shape) -> Option<Shape> {
-        if self.replace.is_some_and(|i| i == index) {
-            Some(std::mem::replace(
-                shape,
-                self.shape.take().unwrap_or(Shape::Noop),
-            ))
-        } else {
-            None
-        }
-    }
-}
-
 impl ShapeAction for InsertShape {
     fn apply(mut self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
-        if self.replace.is_some() {
-            let replaced = IndexedShapesVisitorAdapter(self.deref_mut()).visit(shape);
-            replaced.map_or(Box::new(Noop), |replaced| {
-                Box::new(Self {
-                    shape: Some(replaced),
-                    replace: self.replace,
+        if let Some(replace) = self.replace {
+            let mut visitor =
+                ReplaceShapesVisitor::single(replace, self.shape.unwrap_or(Shape::Noop));
+            IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
+            visitor
+                .replaced_shapes
+                .remove(&replace)
+                .map_or(Box::new(Noop), |replaced| {
+                    Box::new(Self {
+                        shape: Some(replaced),
+                        replace: self.replace,
+                    })
                 })
-            })
         } else {
             if !matches!(shape, Shape::Vec(_)) {
-                let original = std::mem::replace(shape, Shape::Noop);
+                let original = mem::replace(shape, Shape::Noop);
                 *shape = Shape::Vec(vec![original]);
             }
             if let Shape::Vec(vec) = shape {
                 vec.push(self.shape.take().unwrap_or(Shape::Noop));
             }
             let index = CountShapes::count(shape) - 1;
-            Box::new(Self {
-                shape: None,
-                replace: Some(index),
-            })
+            Box::new(InsertShape::replace_by_noop(index))
         }
     }
 
     fn short_name(&self) -> String {
         "Insert Shape".into()
+    }
+}
+
+#[derive(Clone)]
+pub struct ReplaceShapes {
+    shapes_to_replace: HashMap<usize, Shape>,
+}
+
+impl ReplaceShapes {
+    pub fn new(shapes_to_replace: HashMap<usize, Shape>) -> Self {
+        Self { shapes_to_replace }
+    }
+
+    pub fn single(index: usize, shape: Shape) -> Self {
+        Self {
+            shapes_to_replace: HashMap::from_iter([(index, shape)]),
+        }
+    }
+
+    pub fn replace_by_noop<'a>(values: impl Iterator<Item = &'a usize>) -> Self {
+        Self {
+            shapes_to_replace: values.map(|index| (*index, Shape::Noop)).collect(),
+        }
+    }
+}
+
+impl ShapeAction for ReplaceShapes {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        let mut visitor = ReplaceShapesVisitor::new(self.shapes_to_replace);
+        IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
+        Box::new(Self::new(visitor.replaced_shapes))
+    }
+
+    fn short_name(&self) -> String {
+        "Replace Shapes".into()
+    }
+}
+
+struct ReplaceShapesVisitor {
+    shapes_to_replace: HashMap<usize, Shape>,
+    replaced_shapes: HashMap<usize, Shape>,
+}
+
+impl ReplaceShapesVisitor {
+    fn new(shapes_to_replace: HashMap<usize, Shape>) -> Self {
+        Self {
+            shapes_to_replace,
+            replaced_shapes: Default::default(),
+        }
+    }
+
+    fn single(index: usize, shape: Shape) -> Self {
+        Self {
+            shapes_to_replace: HashMap::from_iter([(index, shape)]),
+            replaced_shapes: Default::default(),
+        }
+    }
+
+    fn replace_by_noop<'a>(values: impl Iterator<Item = &'a usize>) -> Self {
+        Self {
+            shapes_to_replace: values.map(|index| (*index, Shape::Noop)).collect(),
+            replaced_shapes: Default::default(),
+        }
+    }
+}
+
+impl IndexedShapesVisitor for ReplaceShapesVisitor {
+    fn indexed_single_shape(&mut self, index: usize, shape: &mut Shape) -> Option<()> {
+        if let Some(shape_replacement) = self.shapes_to_replace.remove(&index) {
+            let replaced = mem::replace(shape, shape_replacement);
+            self.replaced_shapes.insert(index, replaced);
+        }
+        self.shapes_to_replace.is_empty().then_some(())
     }
 }
 
@@ -281,24 +391,34 @@ impl ShapeAction for Combined {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ShapePoint {
     Pos(Pos2),
     Vertex(Vertex, u32),
 }
 
 #[derive(Clone)]
-pub struct RemoveShapePoints(HashSet<ShapePointIndex>);
+pub struct RemoveShapePoints(pub HashSet<ShapePointIndex>);
 
 impl ShapeAction for RemoveShapePoints {
     fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
         let owned = *self;
-        let mut visitor = RemoveShapePointsVisitor {
-            index_to_remove: owned.0,
-            removed: Default::default(),
-        };
-        IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
-        Box::new(AddShapePoints(visitor.removed))
+        let mut points_visitor = RemoveShapePointsVisitor::from_iter(owned.0.iter());
+        IndexedShapesVisitorAdapter(&mut points_visitor).visit(shape);
+        if points_visitor.shapes_to_remove.is_empty() {
+            Box::new(AddShapePoints(points_visitor.removed_points))
+        } else {
+            let mut shapes_visitor =
+                ReplaceShapesVisitor::replace_by_noop(points_visitor.shapes_to_remove.iter());
+            IndexedShapesVisitorAdapter(&mut shapes_visitor).visit(shape);
+            Box::new(Combined::new(
+                "Add Shapes and Points".into(),
+                vec![
+                    Box::new(ReplaceShapes::new(shapes_visitor.replaced_shapes)),
+                    Box::new(AddShapePoints(points_visitor.removed_points)),
+                ],
+            ))
+        }
     }
 
     fn short_name(&self) -> String {
@@ -307,7 +427,7 @@ impl ShapeAction for RemoveShapePoints {
 }
 
 #[derive(Clone)]
-pub struct AddShapePoints(HashMap<usize, HashMap<usize, ShapePoint>>);
+pub struct AddShapePoints(pub HashMap<usize, HashMap<usize, ShapePoint>>);
 
 impl AddShapePoints {
     pub fn single_point(index: ShapePointIndex, point: ShapePoint) -> Self {
@@ -336,46 +456,57 @@ impl ShapeAction for AddShapePoints {
 
 #[derive(Clone)]
 struct RemoveShapePointsVisitor {
-    index_to_remove: HashSet<ShapePointIndex>,
-    removed: HashMap<usize, HashMap<usize, ShapePoint>>,
+    points_to_remove: HashMap<usize, HashSet<usize>>,
+
+    shapes_to_remove: HashSet<usize>,
+    removed_points: HashMap<usize, HashMap<usize, ShapePoint>>,
+}
+
+impl RemoveShapePointsVisitor {
+    fn from_iter<'a>(value: impl Iterator<Item = &'a ShapePointIndex>) -> Self {
+        let points_to_remove = map_grouped_by(value, |v| (v.shape_index, v.point_index));
+        Self {
+            points_to_remove,
+            shapes_to_remove: Default::default(),
+            removed_points: Default::default(),
+        }
+    }
 }
 
 impl IndexedShapesVisitor for RemoveShapePointsVisitor {
     fn indexed_single_shape(&mut self, shape_index: usize, shape: &mut Shape) -> Option<()> {
-        match shape {
-            Shape::Path(path) => {
-                let count = path.points.len();
-                for i in (0..count).rev() {
-                    let shape_point_index = (shape_index, i).into();
-                    if self.index_to_remove.remove(&shape_point_index) {
-                        self.removed
-                            .entry(shape_index)
-                            .or_default()
-                            .insert(shape_index, ShapePoint::Pos(path.points.remove(i)));
-                    }
-                    if self.index_to_remove.is_empty() {
-                        break;
-                    }
-                }
-            }
-            Shape::Mesh(mesh) => {
-                let count = mesh.vertices.len();
-                for i in (0..count).rev() {
-                    let shape_point_index = (shape_index, i).into();
-                    if self.index_to_remove.remove(&shape_point_index) {
-                        self.removed.entry(shape_index).or_default().insert(
-                            i,
-                            ShapePoint::Vertex(mesh.vertices.remove(i), mesh.indices.remove(i)),
-                        );
-                    }
-                    if self.index_to_remove.is_empty() {
-                        break;
+        if let Some(shape_points_to_remove) = self.points_to_remove.remove(&shape_index) {
+            match shape {
+                Shape::Path(path) => {
+                    if shape_points_to_remove.len() > path.points.len() - 2 {
+                        self.shapes_to_remove.insert(shape_index);
+                    } else {
+                        for i in shape_points_to_remove.into_iter().sorted().rev() {
+                            self.removed_points
+                                .entry(shape_index)
+                                .or_default()
+                                .insert(i, ShapePoint::Pos(path.points.remove(i)));
+                        }
                     }
                 }
+                Shape::Mesh(mesh) => {
+                    if shape_points_to_remove.len() > mesh.vertices.len() - 3 {
+                        self.shapes_to_remove.insert(shape_index);
+                    } else {
+                        for i in shape_points_to_remove.into_iter().sorted().rev() {
+                            self.removed_points.entry(shape_index).or_default().insert(
+                                i,
+                                ShapePoint::Vertex(mesh.vertices.remove(i), mesh.indices.remove(i)),
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    self.shapes_to_remove.insert(shape_index);
+                }
             }
-            _ => {}
         }
-        self.index_to_remove.is_empty().then_some(())
+        self.points_to_remove.is_empty().then_some(())
     }
 }
 

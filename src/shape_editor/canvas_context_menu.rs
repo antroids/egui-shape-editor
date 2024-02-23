@@ -72,12 +72,21 @@ impl<'a> ShapeEditor<'a> {
                     self.place_last_shape_point(memory, ctx);
                     ui.close_menu();
                 }
+
+                if ui.button("Mesh").clicked() {
+                    self.apply_action(
+                        InsertShape::mesh_from_two_points(point, point, stroke),
+                        memory,
+                    );
+                    self.place_last_shape_point(memory, ctx);
+                    ui.close_menu();
+                }
             });
 
             if let Some(last_action_name) = memory
                 .action_history
                 .last()
-                .map(|action| action.short_name())
+                .map(|(_, short_name)| short_name)
             {
                 if ui.button(format!("Undo '{}'", last_action_name)).clicked() {
                     memory.undo(self.shape);

@@ -13,44 +13,54 @@ pub enum SnapTarget {
     GridVertical(f32),
 }
 
+impl SnapTarget {
+    fn apply_to_pos(&self, pos: &mut Pos2) {
+        match self {
+            SnapTarget::ShapeControlPoint(p) => *pos = *p,
+            SnapTarget::GridHorizontal(x) => pos.x = *x,
+            SnapTarget::GridVertical(y) => pos.y = *y,
+        }
+    }
+
+    fn keep_on_next_frame(&self) -> bool {
+        false
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SnapInfo {
     pub targets: Vec<SnapTarget>,
     pub snap_point: Option<Pos2>,
 }
 
-impl SnapInfo {
-    pub fn calculate_snap_point(
-        &mut self,
-        pos: Pos2,
-        memory: &ShapeEditorMemory,
-        max_distance: f32,
-    ) {
-        let control_point_snap = memory.shape_control_points.snap_point(
+impl ShapeEditorMemory {
+    pub fn calculate_snap_point(&mut self, pos: Pos2, max_distance: f32) {
+        let control_point_snap = self.shape_control_points.snap_point(
             pos,
             max_distance,
-            &memory.selection.control_points(),
+            &self.selection.control_points(),
         );
         let mut ignored_grid_line_types = HashSet::with_capacity(1);
         ignored_grid_line_types.insert(GridLineType::Sub);
-        let grid_snap = memory
+        let grid_snap = self
             .grid
             .as_ref()
             .map(|grid| grid.snap_point(pos, max_distance, ignored_grid_line_types))
             .unwrap_or_default();
-        self.targets.clear();
+        self.snap.targets.clear();
         let snap_x = match (control_point_snap.0, grid_snap.0) {
             (Some((x, index_set)), None) => {
-                self.targets.extend(index_set.iter().filter_map(|index| {
-                    memory
-                        .shape_control_points
-                        .pos_by_index(index)
-                        .map(SnapTarget::ShapeControlPoint)
-                }));
+                self.snap
+                    .targets
+                    .extend(index_set.iter().filter_map(|index| {
+                        self.shape_control_points
+                            .pos_by_index(index)
+                            .map(SnapTarget::ShapeControlPoint)
+                    }));
                 Some(x)
             }
             (None, Some(x)) => {
-                self.targets.push(SnapTarget::GridHorizontal(x));
+                self.snap.targets.push(SnapTarget::GridHorizontal(x));
                 Some(x)
             }
             (Some((px, index_set)), Some(gx)) => {
@@ -58,26 +68,28 @@ impl SnapInfo {
                 let gx_distance = gx.sub(pos.x).abs();
                 match px_distance.total_cmp(&gx_distance) {
                     Ordering::Less => {
-                        self.targets.extend(index_set.iter().filter_map(|index| {
-                            memory
-                                .shape_control_points
-                                .pos_by_index(index)
-                                .map(SnapTarget::ShapeControlPoint)
-                        }));
+                        self.snap
+                            .targets
+                            .extend(index_set.iter().filter_map(|index| {
+                                self.shape_control_points
+                                    .pos_by_index(index)
+                                    .map(SnapTarget::ShapeControlPoint)
+                            }));
                         Some(px)
                     }
                     Ordering::Equal => {
-                        self.targets.extend(index_set.iter().filter_map(|index| {
-                            memory
-                                .shape_control_points
-                                .pos_by_index(index)
-                                .map(SnapTarget::ShapeControlPoint)
-                        }));
-                        self.targets.push(SnapTarget::GridHorizontal(gx));
+                        self.snap
+                            .targets
+                            .extend(index_set.iter().filter_map(|index| {
+                                self.shape_control_points
+                                    .pos_by_index(index)
+                                    .map(SnapTarget::ShapeControlPoint)
+                            }));
+                        self.snap.targets.push(SnapTarget::GridHorizontal(gx));
                         Some(px)
                     }
                     Ordering::Greater => {
-                        self.targets.push(SnapTarget::GridHorizontal(gx));
+                        self.snap.targets.push(SnapTarget::GridHorizontal(gx));
                         Some(gx)
                     }
                 }
@@ -86,16 +98,17 @@ impl SnapInfo {
         };
         let snap_y = match (control_point_snap.1, grid_snap.1) {
             (Some((y, index_set)), None) => {
-                self.targets.extend(index_set.iter().filter_map(|index| {
-                    memory
-                        .shape_control_points
-                        .pos_by_index(index)
-                        .map(SnapTarget::ShapeControlPoint)
-                }));
+                self.snap
+                    .targets
+                    .extend(index_set.iter().filter_map(|index| {
+                        self.shape_control_points
+                            .pos_by_index(index)
+                            .map(SnapTarget::ShapeControlPoint)
+                    }));
                 Some(y)
             }
             (None, Some(y)) => {
-                self.targets.push(SnapTarget::GridVertical(y));
+                self.snap.targets.push(SnapTarget::GridVertical(y));
                 Some(y)
             }
             (Some((py, index_set)), Some(gy)) => {
@@ -103,26 +116,28 @@ impl SnapInfo {
                 let gy_distance = gy.sub(pos.y).abs();
                 match py_distance.total_cmp(&gy_distance) {
                     Ordering::Less => {
-                        self.targets.extend(index_set.iter().filter_map(|index| {
-                            memory
-                                .shape_control_points
-                                .pos_by_index(index)
-                                .map(SnapTarget::ShapeControlPoint)
-                        }));
+                        self.snap
+                            .targets
+                            .extend(index_set.iter().filter_map(|index| {
+                                self.shape_control_points
+                                    .pos_by_index(index)
+                                    .map(SnapTarget::ShapeControlPoint)
+                            }));
                         Some(py)
                     }
                     Ordering::Equal => {
-                        self.targets.extend(index_set.iter().filter_map(|index| {
-                            memory
-                                .shape_control_points
-                                .pos_by_index(index)
-                                .map(SnapTarget::ShapeControlPoint)
-                        }));
-                        self.targets.push(SnapTarget::GridVertical(gy));
+                        self.snap
+                            .targets
+                            .extend(index_set.iter().filter_map(|index| {
+                                self.shape_control_points
+                                    .pos_by_index(index)
+                                    .map(SnapTarget::ShapeControlPoint)
+                            }));
+                        self.snap.targets.push(SnapTarget::GridVertical(gy));
                         Some(py)
                     }
                     Ordering::Greater => {
-                        self.targets.push(SnapTarget::GridVertical(gy));
+                        self.snap.targets.push(SnapTarget::GridVertical(gy));
                         Some(gy)
                     }
                 }
@@ -130,14 +145,28 @@ impl SnapInfo {
             _ => None,
         };
         if snap_x.is_some() || snap_y.is_some() {
-            self.snap_point
+            self.snap
+                .snap_point
                 .replace(Pos2::new(snap_x.unwrap_or(pos.x), snap_y.unwrap_or(pos.y)));
         }
     }
+}
 
-    pub fn clear(&mut self) {
-        self.targets.clear();
-        self.snap_point.take();
+impl SnapInfo {
+    pub fn new_frame(&mut self, mut mouse_pos: Pos2) {
+        self.targets.retain(|t| {
+            if t.keep_on_next_frame() {
+                t.apply_to_pos(&mut mouse_pos);
+                true
+            } else {
+                false
+            }
+        });
+        self.snap_point = if self.targets.is_empty() {
+            None
+        } else {
+            Some(mouse_pos)
+        }
     }
 }
 
