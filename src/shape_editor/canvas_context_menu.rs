@@ -12,6 +12,7 @@ impl<'a> ShapeEditor<'a> {
         memory: &mut ShapeEditorMemory,
         ctx: &CanvasContext,
     ) {
+        puffin_egui::puffin::profile_function!();
         response.context_menu(|ui| {
             ui.menu_button("Add shape", |ui| {
                 let point = ctx.input.canvas_content_mouse_pos;

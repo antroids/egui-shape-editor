@@ -204,6 +204,8 @@ impl<'a> ShapeEditor<'a> {
         outer_rect: Rect,
         memory: &mut ShapeEditorMemory,
     ) -> ShapeEditorCanvasResponse {
+        puffin_egui::puffin::profile_function!();
+
         let margins = self.style.rulers_margins();
         let canvas_rect = margins.shrink_rect(outer_rect);
         let response = ui.allocate_rect(canvas_rect, Sense::drag());
@@ -264,6 +266,7 @@ impl<'a> ShapeEditor<'a> {
     }
 
     fn handle_actions(&mut self, memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
+        puffin_egui::puffin::profile_function!();
         if let Some(keyboard_action) = ctx.input.keyboard_action {
             match keyboard_action {
                 KeyboardAction::AddPoint => self.handle_add_point(memory, ctx.input.mouse_pos),
@@ -366,6 +369,7 @@ fn update_snap_point(
     memory: &mut ShapeEditorMemory,
     options: &ShapeEditorOptions,
 ) {
+    puffin_egui::puffin::profile_function!();
     if options.snap_enabled
         && matches!(
             memory.mouse_drag,
@@ -380,6 +384,7 @@ fn update_snap_point(
 }
 
 fn handle_drag_started(memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
+    puffin_egui::puffin::profile_function!();
     let mouse_pos = ctx.input.mouse_pos;
     if ctx.input.primary_drag_started() {
         if !ctx.input.action_modifier.do_not_deselect_selected_points() {
@@ -408,6 +413,7 @@ fn handle_drag_in_progress(
     style: &dyn style::Style,
     ctx: &CanvasContext,
 ) {
+    puffin_egui::puffin::profile_function!();
     let mouse_pos = ctx.input.mouse_pos;
     match &mut memory.mouse_drag {
         None => {}
@@ -454,6 +460,7 @@ fn handle_drag_in_progress(
 }
 
 fn handle_drag_released(memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
+    puffin_egui::puffin::profile_function!();
     if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
         if let Some(MouseDrag::MoveShapeControlPoints(start_pos, pos)) = memory.mouse_drag.take() {
             if pos != start_pos && memory.selection.has_control_points() {
@@ -474,6 +481,7 @@ fn handle_scroll_and_zoom(
     options: &ShapeEditorOptions,
     mouse_hover_pos: Option<Pos2>,
 ) {
+    puffin_egui::puffin::profile_function!();
     let (scroll_delta, zoom_delta) =
         ui.input(|input| (input.smooth_scroll_delta, input.zoom_delta()));
     if scroll_delta != Vec2::ZERO {
@@ -506,6 +514,7 @@ fn handle_primary_pressed(
     hovered_ui_shape_points: &HashMap<ShapePointIndex, ShapeControlPoint>,
     memory: &mut ShapeEditorMemory,
 ) {
+    puffin_egui::puffin::profile_function!();
     if ctx.input.canvas_mouse_hover_pos.is_some()
         && ctx.input.mouse_primary_pressed
         && memory.mouse_drag.is_none()
@@ -541,6 +550,7 @@ fn handle_primary_pressed(
 }
 
 fn paint_canvas_border(ctx: &CanvasContext, style: &dyn style::Style) {
+    puffin_egui::puffin::profile_function!();
     ctx.painter.rect(
         *ctx.transform.ui_canvas_rect(),
         0.0,
@@ -550,6 +560,7 @@ fn paint_canvas_border(ctx: &CanvasContext, style: &dyn style::Style) {
 }
 
 fn paint_canvas_background(ctx: &CanvasContext, style: &dyn style::Style) {
+    puffin_egui::puffin::profile_function!();
     ctx.painter.rect(
         *ctx.transform.ui_canvas_rect(),
         0.0,
@@ -565,6 +576,7 @@ fn paint_shape_control_points(
     style: &dyn style::Style,
     hovered: &HashMap<ShapePointIndex, ShapeControlPoint>,
 ) {
+    puffin_egui::puffin::profile_function!();
     for (index, ui_shape_point) in ui_shape_control_points
         .iter()
         .sorted_by(|(k1, _), (k2, _)| k1.cmp(k2))

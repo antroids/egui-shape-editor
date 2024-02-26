@@ -50,12 +50,14 @@ impl Transform {
     }
 
     pub fn transform_shape(&self, shape: &Shape) -> Shape {
+        puffin_egui::puffin::profile_function!();
         let mut shape = shape.clone();
         TransformShape::transform(self.clone(), &mut shape);
         shape
     }
 
     pub fn translate_shape(&self, shape: &Shape) -> Shape {
+        puffin_egui::puffin::profile_function!();
         let mut shape = shape.clone();
         TransformShape::transform(self.to_translate_only(), &mut shape);
         shape

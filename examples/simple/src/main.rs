@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use egui::epaint::CubicBezierShape;
+use egui::panel::TopBottomSide;
 use egui::{Color32, Context, DragValue, Shape, Stroke, Style, Visuals};
 use egui_shape_editor::shape_editor::style::Light;
 use egui_shape_editor::shape_editor::{ShapeEditorBuilder, ShapeEditorOptions};
+use std::convert::Into;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
@@ -73,6 +75,15 @@ impl Default for App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
+        egui::TopBottomPanel::new(TopBottomSide::Bottom, "Bottom panel").show(ctx, |ui| {
+            let mut profile = puffin_egui::puffin::are_scopes_on();
+            ui.checkbox(&mut profile, "Show profiler window");
+            puffin_egui::puffin::set_scopes_on(profile); // controls both the profile capturing, and the displaying of it
+            if profile {
+                puffin_egui::profiler_window(ctx);
+            }
+        });
+        puffin_egui::puffin::profile_function!();
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
@@ -88,12 +99,10 @@ impl eframe::App for App {
                 ui.separator();
                 ui.vertical(|ui| {
                     let style = Light::default();
-                    let mut editor =
+                    let editor =
                         ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
                             .options(self.options.clone())
                             .build();
-                    let shapes_params = editor.selection_shapes_params(ctx);
-                    println!("Shapes params: {:?}", shapes_params);
                     editor.show(ui, ctx)
                 });
             });

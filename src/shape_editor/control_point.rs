@@ -87,6 +87,7 @@ pub struct ShapeControlPoints {
 
 impl ShapeControlPoints {
     pub fn collect(shape: &mut Shape) -> Self {
+        puffin_egui::puffin::profile_function!();
         let mut slf = Self::default();
         IndexedShapeControlPointsVisitorAdapter(&mut slf).visit(shape);
         slf
@@ -98,6 +99,7 @@ impl ShapeControlPoints {
         max_distance: f32,
         ignore: &HashSet<ShapePointIndex>,
     ) -> SnapPoint {
+        puffin_egui::puffin::profile_function!();
         self.index.snap_point(pos, max_distance, ignore)
     }
 
@@ -106,6 +108,7 @@ impl ShapeControlPoints {
         pos: Pos2,
         radius: f32,
     ) -> HashMap<ShapePointIndex, ShapeControlPoint> {
+        puffin_egui::puffin::profile_function!();
         self.index
             .find_points_in_distance(pos, radius)
             .iter()
@@ -114,6 +117,7 @@ impl ShapeControlPoints {
     }
 
     pub fn find_points_in_rect(&self, rect: &Rect) -> Vec<(Pos2, ShapePointIndex)> {
+        puffin_egui::puffin::profile_function!();
         self.index.find_points_in_rect(rect)
     }
 
@@ -121,6 +125,7 @@ impl ShapeControlPoints {
         &self,
         path_point_index: &ShapePointIndex,
     ) -> Option<Pos2> {
+        puffin_egui::puffin::profile_function!();
         self.control_points.values().find_map(|point| {
             if let ShapeControlPoint::ControlPoint {
                 position,
@@ -142,6 +147,7 @@ impl ShapeControlPoints {
     }
 
     pub fn by_shape_index(&self, shape_index: usize) -> HashSet<ShapePointIndex> {
+        puffin_egui::puffin::profile_function!();
         self.control_points
             .keys()
             .filter(|index| index.shape_index == shape_index)

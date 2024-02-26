@@ -175,6 +175,7 @@ pub fn paint_snap_point_highlight(
     snap_info: &SnapInfo,
     style: &dyn style::Style,
 ) {
+    puffin_egui::puffin::profile_function!();
     if let Some(snap_point) = snap_info.snap_point {
         let ui_snap_point = ctx.transform.canvas_content_to_ui.transform_pos(snap_point);
         let canvas_rect = ctx.transform.ui_canvas_rect();

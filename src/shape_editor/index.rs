@@ -225,6 +225,7 @@ pub(crate) struct GridIndex {
 
 impl GridIndex {
     pub fn from_transform(transform: &CanvasTransform) -> Self {
+        puffin_egui::puffin::profile_function!();
         let mut slf = Self::default();
         let canvas_viewport = transform.canvas_content_viewport();
         let x_range = canvas_viewport.x_range();
