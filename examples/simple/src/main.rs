@@ -88,10 +88,13 @@ impl eframe::App for App {
                 ui.separator();
                 ui.vertical(|ui| {
                     let style = Light::default();
-                    ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
-                        .options(self.options.clone())
-                        .build()
-                        .show(ui, ctx)
+                    let mut editor =
+                        ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
+                            .options(self.options.clone())
+                            .build();
+                    let shapes_params = editor.selection_shapes_params(ctx);
+                    println!("Shapes params: {:?}", shapes_params);
+                    editor.show(ui, ctx)
                 });
             });
         });

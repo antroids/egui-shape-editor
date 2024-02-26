@@ -1,6 +1,7 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::KeyboardAction;
 use crate::shape_editor::index::GridIndex;
+use crate::shape_editor::shape_params::ShapesParams;
 use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
@@ -19,6 +20,7 @@ mod control_point;
 mod grid;
 mod index;
 mod rulers;
+mod shape_params;
 mod snap;
 pub mod style;
 mod transform;
@@ -103,6 +105,13 @@ impl Selection {
 
     pub fn control_points(&self) -> &HashSet<ShapePointIndex> {
         &self.control_points
+    }
+
+    pub fn shapes(&self) -> HashSet<usize> {
+        self.control_points
+            .iter()
+            .map(|point| point.shape_index)
+            .collect()
     }
 
     pub fn deselect_control_points(&mut self, control_points: &[ShapePointIndex]) {
@@ -245,6 +254,10 @@ impl<'a> ShapeEditor<'a> {
 
     pub fn selection(&self, ctx: &Context) -> Selection {
         memory_mut(self.id, ctx, |mem| mem.selection.clone())
+    }
+
+    pub fn selection_shapes_params(&mut self, ctx: &Context) -> ShapesParams {
+        ShapesParams::extract(self.shape, self.selection(ctx).shapes())
     }
 }
 

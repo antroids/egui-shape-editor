@@ -17,6 +17,7 @@ members = [
 ]
 
 [dependencies]
+derivative = "2.2.0"
 dyn-clone = "1.0.16"
 egui = "0.26.2"
 egui_extras = "0.26.2"
