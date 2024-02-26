@@ -207,78 +207,14 @@ impl<'a> ShapeEditor<'a> {
         let margins = self.style.rulers_margins();
         let canvas_rect = margins.shrink_rect(outer_rect);
         let response = ui.allocate_rect(canvas_rect, Sense::drag());
-        let mut ctx = CanvasContext::new(canvas_rect, memory, &response, ui);
-        let mut snap_info = SnapInfo::default();
+        let mut ctx = CanvasContext::new(canvas_rect, &self.options, memory, &response, ui);
 
         memory.snap.new_frame(ctx.input.canvas_content_mouse_pos);
         self.canvas_context_menu(response.clone(), memory, &ctx);
-
-        ctx.painter
-            .rect(canvas_rect, 0.0, self.style.canvas_bg_color(), Stroke::NONE);
-
-        if ui.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::Delete))
-        }) {
-            let selected_by_shape = memory
-                .selection
-                .control_points()
-                .iter()
-                .filter_map(|index| {
-                    memory
-                        .shape_control_points
-                        .by_index(index)
-                        .map(|control_point| (control_point.shape_index(), *index))
-                })
-                .into_group_map();
-            let mut actions: Vec<Box<dyn ShapeAction>> = Vec::new();
-            for (selected_shape, selected_shape_points) in selected_by_shape {
-                if let Some(shape_type) = memory.shape_control_points.shape_by_index(selected_shape)
-                {
-                    let shape_points = memory.shape_control_points.by_shape_index(selected_shape);
-                    match shape_type {
-                        ShapeType::Path => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            if selected_shape_points.len() > shape_points.len() - 2 {
-                                // delete shape
-                            } else {
-                                // delete points
-                            }
-                        }
-                        ShapeType::Mesh => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            if selected_shape_points.len() > shape_points.len() - 3 {
-                                // delete shape
-                            } else {
-                                // delete points
-                            }
-                        }
-                        _ => {
-                            memory
-                                .selection
-                                .deselect_control_points(&selected_shape_points);
-                            // delete shape
-                        }
-                    }
-                }
-            }
-        } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
-        {
-            if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
-                self.handle_add_point(
-                    memory,
-                    ctx.transform
-                        .ui_to_canvas_content
-                        .transform_pos(mouse_hover_pos),
-                );
-            }
-        }
-
-        update_snap_point(&mut snap_info, &ctx, memory, &self.options);
-        handle_drag_in_progress(memory, self.shape, self.style, &ctx, &mut snap_info);
+        paint_canvas_background(&ctx, self.style);
+        self.handle_actions(memory, &ctx);
+        update_snap_point(&ctx, memory, &self.options);
+        handle_drag_in_progress(memory, self.shape, self.style, &ctx);
         handle_drag_released(memory, &ctx);
         handle_scroll_and_zoom(memory, ui, &self.options, ctx.input.canvas_mouse_hover_pos);
         ctx.transform = CanvasTransform::new(canvas_rect, &memory.transform);
