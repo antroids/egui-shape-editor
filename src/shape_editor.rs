@@ -19,6 +19,7 @@ mod canvas_context_menu;
 mod control_point;
 mod grid;
 mod index;
+mod interaction;
 mod rulers;
 mod shape_params;
 mod snap;
@@ -38,11 +39,10 @@ pub struct ShapeEditor<'a> {
 pub struct ShapeEditorOptions {
     pub scroll_factor: Vec2,
     pub zoom_factor: f32,
-    pub undo_shortcut: KeyboardShortcut,
     pub scaling_range: Range<Vec2>,
     pub stroke: Stroke,
     pub snap_distance: f32,
-    pub snap_enabled: bool,
+    pub snap_enabled_by_default: bool,
     pub keyboard_shortcuts: HashMap<KeyboardAction, KeyboardShortcut>,
 }
 
@@ -51,11 +51,10 @@ impl Default for ShapeEditorOptions {
         Self {
             scroll_factor: Vec2::new(0.1, 0.1),
             zoom_factor: 0.2,
-            undo_shortcut: KeyboardShortcut::new(Modifiers::CTRL, Key::Z),
             scaling_range: Vec2::splat(0.01)..Vec2::splat(10.0),
             stroke: Stroke::new(1.0, Color32::BLACK),
             snap_distance: 5.0,
-            snap_enabled: true,
+            snap_enabled_by_default: true,
             keyboard_shortcuts: Default::default(),
         }
     }

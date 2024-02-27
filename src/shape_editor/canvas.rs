@@ -32,6 +32,10 @@ impl ActionModifier {
     fn add_point_on_click(&self) -> bool {
         self.0.ctrl || self.0.command
     }
+
+    fn snap_mouse_cursor(&self) -> bool {
+        self.0.alt
+    }
 }
 
 #[derive(Debug)]
@@ -211,7 +215,6 @@ impl<'a> ShapeEditor<'a> {
         let response = ui.allocate_rect(canvas_rect, Sense::drag());
         let mut ctx = CanvasContext::new(canvas_rect, &self.options, memory, &response, ui);
 
-        memory.snap.new_frame(ctx.input.canvas_content_mouse_pos);
         self.canvas_context_menu(response.clone(), memory, &ctx);
         paint_canvas_background(&ctx, self.style);
         self.handle_actions(memory, &ctx);
@@ -282,14 +285,13 @@ impl<'a> ShapeEditor<'a> {
             }
         } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
         {
-            if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
-                self.handle_add_point(
-                    memory,
-                    ctx.transform
-                        .ui_to_canvas_content
-                        .transform_pos(mouse_hover_pos),
-                );
-            }
+            self.handle_add_point(
+                memory,
+                memory
+                    .snap
+                    .snap_point
+                    .unwrap_or(ctx.input.canvas_content_mouse_pos),
+            );
         }
     }
 
@@ -370,16 +372,13 @@ fn update_snap_point(
     options: &ShapeEditorOptions,
 ) {
     puffin_egui::puffin::profile_function!();
-    if options.snap_enabled
-        && matches!(
-            memory.mouse_drag,
-            Some(MouseDrag::MoveShapeControlPoints(..))
-        )
-    {
+    if options.snap_enabled_by_default != ctx.input.action_modifier.snap_mouse_cursor() {
         memory.calculate_snap_point(
             ctx.input.canvas_content_mouse_pos,
             ctx.transform.ui_to_canvas_content.scale().x * options.snap_distance,
         );
+    } else {
+        memory.clear_snap_point();
     }
 }
 

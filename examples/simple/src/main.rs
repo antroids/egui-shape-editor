@@ -91,8 +91,8 @@ impl eframe::App for App {
                     ui.set_width(100.0);
                     egui::stroke_ui(ui, &mut options.stroke, "Stroke");
                     ui.separator();
-                    ui.checkbox(&mut options.snap_enabled, "Snap enabled");
-                    ui.add_enabled_ui(options.snap_enabled, |ui| {
+                    ui.checkbox(&mut options.snap_enabled_by_default, "Snap enabled");
+                    ui.add_enabled_ui(options.snap_enabled_by_default, |ui| {
                         ui.add(DragValue::new(&mut options.snap_distance).clamp_range(0..=100));
                     });
                 });

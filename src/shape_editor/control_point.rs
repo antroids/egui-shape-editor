@@ -1,4 +1,4 @@
-use crate::shape_editor::index::{ShapeControlPointsIndex, SnapPoint};
+use crate::shape_editor::index::{ShapeControlPointsIndex, SnapComponent};
 use crate::shape_editor::style;
 use crate::shape_editor::visitor::{
     IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter, ShapePointIndex,
@@ -93,14 +93,22 @@ impl ShapeControlPoints {
         slf
     }
 
-    pub fn snap_point(
+    pub fn snap_x(
         &self,
         pos: Pos2,
         max_distance: f32,
         ignore: &HashSet<ShapePointIndex>,
-    ) -> SnapPoint {
-        puffin_egui::puffin::profile_function!();
-        self.index.snap_point(pos, max_distance, ignore)
+    ) -> Option<SnapComponent> {
+        self.index.snap_x(pos, max_distance, ignore)
+    }
+
+    pub fn snap_y(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+        ignore: &HashSet<ShapePointIndex>,
+    ) -> Option<SnapComponent> {
+        self.index.snap_y(pos, max_distance, ignore)
     }
 
     pub fn points_in_radius(
