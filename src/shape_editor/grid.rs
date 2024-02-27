@@ -1,6 +1,6 @@
 use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::index::{GridIndex, GridLineType};
-use crate::shape_editor::{style, transform};
+use crate::shape_editor::style;
 use egui::emath::Pos2;
 use egui::epaint::Shape;
 use egui::Vec2;
