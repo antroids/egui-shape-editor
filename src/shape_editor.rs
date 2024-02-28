@@ -1,14 +1,14 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::KeyboardAction;
 use crate::shape_editor::index::GridIndex;
+use crate::shape_editor::interaction::Interaction;
 use crate::shape_editor::shape_params::ShapesParams;
 use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::{HashMap, HashSet};
 use egui::{
-    Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rect, Response, Sense, Shape,
-    Stroke, Ui, Vec2,
+    Color32, Context, Id, KeyboardShortcut, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
 use std::ops::Range;
 use transform::Transform;
@@ -125,7 +125,7 @@ pub struct ShapeEditorMemory {
     transform: Transform,
     shape_control_points: ShapeControlPoints,
     grid: Option<GridIndex>,
-    mouse_drag: Option<MouseDrag>,
+    interaction: Vec<Box<dyn Interaction>>,
     action_history: Vec<(Box<dyn ShapeAction>, String)>,
     last_mouse_hover_pos: Pos2,
     last_canvas_mouse_hover_pos: Pos2,
@@ -139,7 +139,7 @@ impl Default for ShapeEditorMemory {
             transform: Default::default(),
             shape_control_points: Default::default(),
             grid: None,
-            mouse_drag: None,
+            interaction: Vec::new(),
             action_history: Vec::new(),
             last_mouse_hover_pos: Pos2::ZERO,
             last_canvas_mouse_hover_pos: Pos2::ZERO,

@@ -5,6 +5,7 @@ pub struct Light {
     pub path_point_stroke: Stroke,
     pub control_point_radius: f32,
     pub control_point_stroke: Stroke,
+    pub preview_point_stroke: Stroke,
 
     pub canvas_bg_color: Color32,
 
@@ -43,6 +44,8 @@ impl Default for Light {
             path_point_stroke: Stroke::new(2.0, Color32::RED),
             control_point_radius: 5.0,
             control_point_stroke: Stroke::new(2.0, Color32::GREEN),
+            preview_point_stroke: Stroke::new(2.0, Color32::GRAY),
+
             canvas_bg_color: Color32::WHITE,
             border_stroke: Stroke::new(3.0, Color32::GRAY),
 
@@ -119,6 +122,9 @@ impl Style for Light {
     }
     fn control_point_stroke(&self) -> Stroke {
         self.control_point_stroke
+    }
+    fn preview_point_stroke(&self) -> Stroke {
+        self.preview_point_stroke
     }
     fn canvas_bg_color(&self) -> Color32 {
         self.canvas_bg_color
@@ -200,6 +206,7 @@ pub trait Style {
     fn path_point_stroke(&self) -> Stroke;
     fn control_point_radius(&self) -> f32;
     fn control_point_stroke(&self) -> Stroke;
+    fn preview_point_stroke(&self) -> Stroke;
     fn canvas_bg_color(&self) -> Color32;
     fn border_stroke(&self) -> Stroke;
     fn selection_stroke(&self) -> Stroke;
