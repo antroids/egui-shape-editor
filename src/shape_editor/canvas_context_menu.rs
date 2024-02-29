@@ -16,7 +16,7 @@ impl<'a> ShapeEditor<'a> {
                 let point = ctx.input.canvas_content_mouse_pos;
 
                 if ui.button("Quadratic Bezier").clicked() {
-                    interaction::AddPointsThanShape::with_start_point(
+                    memory.begin_interaction(interaction::AddPointsThanShape::with_start_point(
                         point,
                         3,
                         |points, options| {
@@ -33,7 +33,7 @@ impl<'a> ShapeEditor<'a> {
                                 None
                             }
                         },
-                    );
+                    ));
                     ui.close_menu();
                 }
 

@@ -1,30 +1,41 @@
+use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapeVisitor,
 };
 use derivative::Derivative;
-use egui::ahash::{HashMap, HashSet};
+use egui::ahash::HashSet;
 use egui::epaint::{
     CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape, RectShape, TextShape,
 };
 use egui::{Color32, Mesh, Pos2, Rounding, Shape, Stroke, TextureId};
 use num_traits::Zero;
 use ordered_float::NotNan;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Copy, PartialEq, Derivative, Debug)]
 #[derivative(Hash, Eq)]
-pub enum ShapeParam {
-    StrokeColor(Color32),
-    StrokeWidth(NotNan<f32>),
+pub enum ParamValue {
+    Color(Color32),
+    Float(NotNan<f32>),
     Rounding(#[derivative(Hash(hash_with = "rounding_hash"))] Rounding),
-    FillColor(Color32),
-    ClosedShape(bool),
-    Radius(NotNan<f32>),
+    Boolean(bool),
     Texture(TextureId),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Ord, PartialOrd)]
+pub enum ParamType {
+    StrokeColor,
+    StrokeWidth,
+    Rounding,
+    FillColor,
+    ClosedShape,
+    Radius,
+    Texture,
+}
+
 #[derive(Clone, Debug)]
-pub struct ShapesParams(HashMap<usize, HashSet<ShapeParam>>);
+pub struct ShapesParams(pub BTreeMap<usize, BTreeMap<ParamType, ParamValue>>);
 
 impl ShapesParams {
     pub fn extract(shape: &mut Shape, index: HashSet<usize>) -> Self {
@@ -34,6 +45,31 @@ impl ShapesParams {
         };
         IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
         Self(visitor.shape_params)
+    }
+
+    pub fn common(&self) -> BTreeMap<ParamType, Option<ParamValue>> {
+        let mut params: BTreeMap<ParamType, HashSet<ParamValue>> = BTreeMap::default();
+        for (_, param) in &self.0 {
+            for (ty, val) in param {
+                if let Some(values) = params.get_mut(ty) {
+                    if values.len() < 2 {
+                        values.insert(*val);
+                    }
+                } else {
+                    params.insert(*ty, HashSet::from_iter([*val]));
+                }
+            }
+        }
+        params
+            .into_iter()
+            .map(|(k, v)| {
+                if v.len() == 1 {
+                    (k, Some(v.into_iter().next().expect("Must be at least one")))
+                } else {
+                    (k, None)
+                }
+            })
+            .collect()
     }
 }
 
@@ -49,8 +85,16 @@ where
 
 struct ExtractShapeParamsVisitor {
     shapes: HashSet<usize>,
-    shape_params: HashMap<usize, HashSet<ShapeParam>>,
+    shape_params: BTreeMap<usize, BTreeMap<ParamType, ParamValue>>,
 }
+
+struct ApplyShapeParamsVisitor {
+    shape_params: BTreeMap<usize, BTreeMap<ParamType, ParamValue>>,
+    changed_params: BTreeMap<usize, BTreeMap<ParamType, ParamValue>>,
+}
+
+#[derive(Clone)]
+pub struct ApplyShapeParams(pub BTreeMap<usize, BTreeMap<ParamType, ParamValue>>);
 
 impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
     fn indexed_line_segment(
@@ -62,9 +106,12 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(stroke.width)),
+                BTreeMap::from_iter([
+                    (ParamType::StrokeColor, ParamValue::Color(stroke.color)),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(stroke.width)),
+                    ),
                 ]),
             );
         }
@@ -75,11 +122,14 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(path.stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(path.stroke.width)),
-                    ShapeParam::ClosedShape(path.closed),
-                    ShapeParam::FillColor(path.fill),
+                BTreeMap::from_iter([
+                    (ParamType::StrokeColor, ParamValue::Color(path.stroke.color)),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(path.stroke.width)),
+                    ),
+                    (ParamType::ClosedShape, ParamValue::Boolean(path.closed)),
+                    (ParamType::FillColor, ParamValue::Color(path.fill)),
                 ]),
             );
         }
@@ -90,11 +140,20 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(circle.stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(circle.stroke.width)),
-                    ShapeParam::FillColor(circle.fill),
-                    ShapeParam::Radius(not_nan_f32(circle.radius)),
+                BTreeMap::from_iter([
+                    (
+                        ParamType::StrokeColor,
+                        ParamValue::Color(circle.stroke.color),
+                    ),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(circle.stroke.width)),
+                    ),
+                    (ParamType::FillColor, ParamValue::Color(circle.fill)),
+                    (
+                        ParamType::Radius,
+                        ParamValue::Float(not_nan_f32(circle.radius)),
+                    ),
                 ]),
             );
         }
@@ -105,12 +164,18 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(rect.stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(rect.stroke.width)),
-                    ShapeParam::FillColor(rect.fill),
-                    ShapeParam::Rounding(rect.rounding),
-                    ShapeParam::Texture(rect.fill_texture_id),
+                BTreeMap::from_iter([
+                    (ParamType::StrokeColor, ParamValue::Color(rect.stroke.color)),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(rect.stroke.width)),
+                    ),
+                    (ParamType::FillColor, ParamValue::Color(rect.fill)),
+                    (ParamType::Rounding, ParamValue::Rounding(rect.rounding)),
+                    (
+                        ParamType::Texture,
+                        ParamValue::Texture(rect.fill_texture_id),
+                    ),
                 ]),
             );
         }
@@ -121,7 +186,7 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
+                BTreeMap::from_iter([
                     // TODO
                 ]),
             );
@@ -133,7 +198,7 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([ShapeParam::Texture(mesh.texture_id)]),
+                BTreeMap::from_iter([(ParamType::Texture, ParamValue::Texture(mesh.texture_id))]),
             );
         }
         self.shapes.is_empty().then_some(())
@@ -147,11 +212,17 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(bezier.stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(bezier.stroke.width)),
-                    ShapeParam::ClosedShape(bezier.closed),
-                    ShapeParam::FillColor(bezier.fill),
+                BTreeMap::from_iter([
+                    (
+                        ParamType::StrokeColor,
+                        ParamValue::Color(bezier.stroke.color),
+                    ),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(bezier.stroke.width)),
+                    ),
+                    (ParamType::ClosedShape, ParamValue::Boolean(bezier.closed)),
+                    (ParamType::FillColor, ParamValue::Color(bezier.fill)),
                 ]),
             );
         }
@@ -162,21 +233,22 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
         if self.shapes.remove(&index) {
             self.shape_params.insert(
                 index,
-                HashSet::from_iter([
-                    ShapeParam::StrokeColor(bezier.stroke.color),
-                    ShapeParam::StrokeWidth(not_nan_f32(bezier.stroke.width)),
-                    ShapeParam::ClosedShape(bezier.closed),
-                    ShapeParam::FillColor(bezier.fill),
+                BTreeMap::from_iter([
+                    (
+                        ParamType::StrokeColor,
+                        ParamValue::Color(bezier.stroke.color),
+                    ),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(bezier.stroke.width)),
+                    ),
+                    (ParamType::ClosedShape, ParamValue::Boolean(bezier.closed)),
+                    (ParamType::FillColor, ParamValue::Color(bezier.fill)),
                 ]),
             );
         }
         self.shapes.is_empty().then_some(())
     }
-}
-
-struct ApplyShapeParamsVisitor {
-    shape_params: HashMap<usize, HashSet<ShapeParam>>,
-    changed_params: HashMap<usize, HashSet<ShapeParam>>,
 }
 
 impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
@@ -187,20 +259,20 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
         stroke: &mut Stroke,
     ) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(stroke.width);
                         std::mem::swap(v, &mut value);
                         stroke.width = value.into_inner();
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -211,26 +283,26 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_path(&mut self, index: usize, path: &mut PathShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut path.stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(path.stroke.width);
                         std::mem::swap(v, &mut value);
                         path.stroke.width = value.into_inner();
                     }
-                    ShapeParam::ClosedShape(v) => {
+                    (ParamType::ClosedShape, ParamValue::Boolean(v)) => {
                         std::mem::swap(v, &mut path.closed);
                     }
-                    ShapeParam::FillColor(v) => {
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut path.fill);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -241,28 +313,28 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_circle(&mut self, index: usize, circle: &mut CircleShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut circle.stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(circle.stroke.width);
                         std::mem::swap(v, &mut value);
                         circle.stroke.width = value.into_inner();
                     }
-                    ShapeParam::Radius(v) => {
+                    (ParamType::Radius, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(circle.radius);
                         std::mem::swap(v, &mut value);
                         circle.radius = value.into_inner();
                     }
-                    ShapeParam::FillColor(v) => {
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut circle.fill);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -273,29 +345,29 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_rect(&mut self, index: usize, rect: &mut RectShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut rect.stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(rect.stroke.width);
                         std::mem::swap(v, &mut value);
                         rect.stroke.width = value.into_inner();
                     }
-                    ShapeParam::Rounding(v) => {
+                    (ParamType::Rounding, ParamValue::Rounding(v)) => {
                         std::mem::swap(v, &mut rect.rounding);
                     }
-                    ShapeParam::FillColor(v) => {
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut rect.fill);
                     }
-                    ShapeParam::Texture(v) => {
+                    (ParamType::Texture, ParamValue::Texture(v)) => {
                         std::mem::swap(v, &mut rect.fill_texture_id);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -306,12 +378,12 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_text(&mut self, index: usize, _text: &mut TextShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
                     _ => continue,
                 }
-                // changed.insert(param);
+                // changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -322,15 +394,15 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_mesh(&mut self, index: usize, mesh: &mut Mesh) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::Texture(v) => {
+                    (ParamType::Texture, ParamValue::Texture(v)) => {
                         std::mem::swap(v, &mut mesh.texture_id);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -345,26 +417,26 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
         bezier: &mut QuadraticBezierShape,
     ) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut bezier.stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(bezier.stroke.width);
                         std::mem::swap(v, &mut value);
                         bezier.stroke.width = value.into_inner();
                     }
-                    ShapeParam::ClosedShape(v) => {
+                    (ParamType::ClosedShape, ParamValue::Boolean(v)) => {
                         std::mem::swap(v, &mut bezier.closed);
                     }
-                    ShapeParam::FillColor(v) => {
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut bezier.fill);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
@@ -375,32 +447,58 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_cubic_bezier(&mut self, index: usize, bezier: &mut CubicBezierShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = HashSet::default();
+            let mut changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
-                    ShapeParam::StrokeColor(v) => {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut bezier.stroke.color);
                     }
-                    ShapeParam::StrokeWidth(v) => {
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
                         let mut value = not_nan_f32(bezier.stroke.width);
                         std::mem::swap(v, &mut value);
                         bezier.stroke.width = value.into_inner();
                     }
-                    ShapeParam::ClosedShape(v) => {
+                    (ParamType::ClosedShape, ParamValue::Boolean(v)) => {
                         std::mem::swap(v, &mut bezier.closed);
                     }
-                    ShapeParam::FillColor(v) => {
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut bezier.fill);
                     }
                     _ => continue,
                 }
-                changed.insert(param);
+                changed.insert(param.0, param.1);
             }
             if !changed.is_empty() {
                 self.changed_params.insert(index, changed);
             }
         }
         self.shape_params.is_empty().then_some(())
+    }
+}
+
+impl ApplyShapeParams {
+    pub fn from_common(params: BTreeMap<ParamType, ParamValue>, shapes: HashSet<usize>) -> Self {
+        Self(
+            shapes
+                .into_iter()
+                .map(|shape| (shape, params.clone()))
+                .collect(),
+        )
+    }
+}
+
+impl ShapeAction for ApplyShapeParams {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        let mut visitor = ApplyShapeParamsVisitor {
+            shape_params: (*self).0,
+            changed_params: Default::default(),
+        };
+        IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
+        Box::new(Self(visitor.changed_params))
+    }
+
+    fn short_name(&self) -> String {
+        "Update Parameters".into()
     }
 }
 

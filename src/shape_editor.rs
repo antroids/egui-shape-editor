@@ -2,7 +2,7 @@ use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::KeyboardAction;
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::interaction::Interaction;
-use crate::shape_editor::shape_params::ShapesParams;
+use crate::shape_editor::shape_params::ApplyShapeParams;
 use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
@@ -10,8 +10,11 @@ use egui::ahash::{HashMap, HashSet};
 use egui::{
     Color32, Context, Id, KeyboardShortcut, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
+use std::collections::BTreeMap;
 use std::ops::Range;
 use transform::Transform;
+
+pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams};
 
 mod action;
 mod canvas;
@@ -257,6 +260,25 @@ impl<'a> ShapeEditor<'a> {
 
     pub fn selection_shapes_params(&mut self, ctx: &Context) -> ShapesParams {
         ShapesParams::extract(self.shape, self.selection(ctx).shapes())
+    }
+
+    pub fn apply_shapes_params(&mut self, ctx: &Context, params: ShapesParams) {
+        memory_mut(self.id, ctx, |mem| {
+            self.apply_action(ApplyShapeParams(params.0), mem)
+        })
+    }
+
+    pub fn apply_common_shapes_params(
+        &mut self,
+        ctx: &Context,
+        params: BTreeMap<ParamType, ParamValue>,
+    ) {
+        memory_mut(self.id, ctx, |mem| {
+            self.apply_action(
+                ApplyShapeParams::from_common(params, mem.selection.shapes()),
+                mem,
+            )
+        })
     }
 }
 

@@ -193,6 +193,7 @@ impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
         point: &mut Pos2,
         shape_type: ShapeType,
     ) -> Option<()> {
+        puffin_egui::puffin::profile_function!();
         self.control_points
             .insert(index, ShapeControlPoint::PathPoint { position: *point });
         self.shapes.insert(index.shape_index, shape_type);
@@ -207,6 +208,7 @@ impl IndexedShapeControlPointsVisitor<()> for ShapeControlPoints {
         connected_points: HashMap<ShapePointIndex, Pos2>,
         shape_type: ShapeType,
     ) -> Option<()> {
+        puffin_egui::puffin::profile_function!();
         self.control_points.insert(
             index,
             ShapeControlPoint::ControlPoint {

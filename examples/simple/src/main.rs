@@ -2,10 +2,16 @@
 
 use egui::epaint::CubicBezierShape;
 use egui::panel::TopBottomSide;
-use egui::{Color32, Context, DragValue, Shape, Stroke, Style, Visuals};
+use egui::{
+    Color32, Context, DragValue, Response, Rounding, Shape, Stroke, Style, Ui, Visuals, Widget,
+    WidgetText,
+};
 use egui_shape_editor::shape_editor::style::Light;
-use egui_shape_editor::shape_editor::{ShapeEditorBuilder, ShapeEditorOptions};
+use egui_shape_editor::shape_editor::{
+    ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions,
+};
 use std::convert::Into;
+use std::ops::{BitOrAssign, RangeInclusive};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
@@ -85,6 +91,12 @@ impl eframe::App for App {
         });
         puffin_egui::puffin::profile_function!();
         egui::CentralPanel::default().show(ctx, |ui| {
+            let style = Light::default();
+            let mut editor =
+                ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
+                    .options(self.options.clone())
+                    .build();
+
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     let options = &mut self.options;
@@ -95,17 +107,186 @@ impl eframe::App for App {
                     ui.add_enabled_ui(options.snap_enabled_by_default, |ui| {
                         ui.add(DragValue::new(&mut options.snap_distance).clamp_range(0..=100));
                     });
+                    ui.separator();
+                    ui.label("Parameters:");
+                    let params = editor.selection_shapes_params(ctx);
+                    let mut common_params = params.common();
+                    let mut changed = false;
+                    for (ty, val) in &mut common_params {
+                        ui.horizontal(|ui| match ty {
+                            ParamType::StrokeColor => changed.bitor_assign(
+                                ui.add(color_param_widget(val, options.stroke.color, "Color: "))
+                                    .changed(),
+                            ),
+                            ParamType::StrokeWidth => changed.bitor_assign(
+                                ui.add(float_param_widget(
+                                    val,
+                                    options.stroke.width,
+                                    0.0..=50.0,
+                                    "Width: ",
+                                ))
+                                .changed(),
+                            ),
+                            ParamType::Rounding => changed.bitor_assign(
+                                ui.add(rounding_param_widget(
+                                    val,
+                                    Rounding::ZERO,
+                                    0.0..=50.0,
+                                    "Rounding: ",
+                                ))
+                                .changed(),
+                            ),
+                            ParamType::FillColor => changed.bitor_assign(
+                                ui.add(color_param_widget(
+                                    val,
+                                    options.stroke.color,
+                                    "Fill Color: ",
+                                ))
+                                .changed(),
+                            ),
+                            ParamType::ClosedShape => changed.bitor_assign(
+                                ui.add(boolean_param_widget(val, false, "Closed: "))
+                                    .changed(),
+                            ),
+                            ParamType::Radius => changed.bitor_assign(
+                                ui.add(float_param_widget(val, 50.0, 0.0..=10000.0, "Radius: "))
+                                    .changed(),
+                            ),
+                            ParamType::Texture => {}
+                        });
+                    }
+                    if changed {
+                        editor.apply_common_shapes_params(
+                            ctx,
+                            common_params
+                                .into_iter()
+                                .filter_map(|(ty, val)| val.map(|val| (ty, val)))
+                                .collect(),
+                        );
+                    }
                 });
                 ui.separator();
-                ui.vertical(|ui| {
-                    let style = Light::default();
-                    let editor =
-                        ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
-                            .options(self.options.clone())
-                            .build();
-                    editor.show(ui, ctx)
-                });
+                ui.vertical(|ui| editor.show(ui, ctx));
             });
         });
+    }
+}
+
+fn color_param_widget<'a, L: Into<WidgetText> + 'a>(
+    value: &'a mut Option<ParamValue>,
+    default: Color32,
+    label: L,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| -> Response {
+        let mut enabled = value.is_some();
+        let mut color = if let Some(ParamValue::Color(color)) = value {
+            *color
+        } else {
+            default
+        };
+        let mut response = ui.checkbox(&mut enabled, "");
+        ui.label(label);
+        ui.add_enabled_ui(enabled, |ui| {
+            response.bitor_assign(ui.color_edit_button_srgba(&mut color));
+        });
+        *value = enabled.then(|| ParamValue::Color(color));
+        response
+    }
+}
+
+fn float_param_widget<'a, L: Into<WidgetText> + 'a>(
+    value: &'a mut Option<ParamValue>,
+    default: f32,
+    range: RangeInclusive<f32>,
+    label: L,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| -> Response {
+        let mut enabled = value.is_some();
+        let mut float = if let Some(ParamValue::Float(float)) = value {
+            float.into_inner()
+        } else {
+            default
+        };
+        let mut response = ui.checkbox(&mut enabled, "");
+        ui.label(label);
+        ui.add_enabled_ui(enabled, |ui| {
+            response.bitor_assign(ui.add(DragValue::new(&mut float).clamp_range(range)));
+        });
+        *value = enabled.then(|| ParamValue::Float(float.try_into().unwrap_or_default()));
+        response
+    }
+}
+
+fn boolean_param_widget<'a, L: Into<WidgetText> + 'a>(
+    value: &'a mut Option<ParamValue>,
+    default: bool,
+    label: L,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| -> Response {
+        let mut enabled = value.is_some();
+        let mut boolean = if let Some(ParamValue::Boolean(boolean)) = value {
+            *boolean
+        } else {
+            default
+        };
+        let mut response = ui.checkbox(&mut enabled, "");
+        ui.label(label);
+        ui.add_enabled_ui(enabled, |ui| {
+            response.bitor_assign(ui.checkbox(&mut boolean, ""));
+        });
+        *value = enabled.then(|| ParamValue::Boolean(boolean));
+        response
+    }
+}
+
+fn rounding_param_widget<'a, L: Into<WidgetText> + 'a>(
+    value: &'a mut Option<ParamValue>,
+    default: Rounding,
+    range: RangeInclusive<f32>,
+    label: L,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| -> Response {
+        let mut enabled = value.is_some();
+        let mut rounding = if let Some(ParamValue::Rounding(rounding)) = value {
+            *rounding
+        } else {
+            default
+        };
+        let mut response = ui.checkbox(&mut enabled, "");
+        ui.label(label);
+        ui.add_enabled_ui(enabled, |ui| {
+            ui.vertical(|ui| {
+                response.bitor_assign(
+                    ui.add(
+                        DragValue::new(&mut rounding.nw)
+                            .prefix("NW: ")
+                            .clamp_range(range.clone()),
+                    ),
+                );
+                response.bitor_assign(
+                    ui.add(
+                        DragValue::new(&mut rounding.ne)
+                            .prefix("NE: ")
+                            .clamp_range(range.clone()),
+                    ),
+                );
+                response.bitor_assign(
+                    ui.add(
+                        DragValue::new(&mut rounding.se)
+                            .prefix("SE: ")
+                            .clamp_range(range.clone()),
+                    ),
+                );
+                response.bitor_assign(
+                    ui.add(
+                        DragValue::new(&mut rounding.sw)
+                            .prefix("SW: ")
+                            .clamp_range(range),
+                    ),
+                );
+            });
+        });
+        *value = enabled.then(|| ParamValue::Rounding(rounding));
+        response
     }
 }
