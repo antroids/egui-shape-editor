@@ -1,15 +1,20 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::KeyboardAction;
 use crate::shape_editor::index::GridIndex;
+use crate::shape_editor::interaction::Interaction;
+use crate::shape_editor::shape_params::ApplyShapeParams;
+use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
 use control_point::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::{HashMap, HashSet};
 use egui::{
-    Color32, Context, Id, Key, KeyboardShortcut, Modifiers, Pos2, Rect, Response, Sense, Shape,
-    Stroke, Ui, Vec2,
+    Color32, Context, Id, KeyboardShortcut, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
 };
+use std::collections::BTreeMap;
 use std::ops::Range;
 use transform::Transform;
+
+pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams};
 
 mod action;
 mod canvas;
@@ -17,7 +22,9 @@ mod canvas_context_menu;
 mod control_point;
 mod grid;
 mod index;
+mod interaction;
 mod rulers;
+mod shape_params;
 mod snap;
 pub mod style;
 mod transform;
@@ -35,11 +42,10 @@ pub struct ShapeEditor<'a> {
 pub struct ShapeEditorOptions {
     pub scroll_factor: Vec2,
     pub zoom_factor: f32,
-    pub undo_shortcut: KeyboardShortcut,
     pub scaling_range: Range<Vec2>,
     pub stroke: Stroke,
     pub snap_distance: f32,
-    pub snap_enabled: bool,
+    pub snap_enabled_by_default: bool,
     pub keyboard_shortcuts: HashMap<KeyboardAction, KeyboardShortcut>,
 }
 
@@ -48,11 +54,10 @@ impl Default for ShapeEditorOptions {
         Self {
             scroll_factor: Vec2::new(0.1, 0.1),
             zoom_factor: 0.2,
-            undo_shortcut: KeyboardShortcut::new(Modifiers::CTRL, Key::Z),
             scaling_range: Vec2::splat(0.01)..Vec2::splat(10.0),
             stroke: Stroke::new(1.0, Color32::BLACK),
             snap_distance: 5.0,
-            snap_enabled: true,
+            snap_enabled_by_default: true,
             keyboard_shortcuts: Default::default(),
         }
     }
@@ -104,6 +109,13 @@ impl Selection {
         &self.control_points
     }
 
+    pub fn shapes(&self) -> HashSet<usize> {
+        self.control_points
+            .iter()
+            .map(|point| point.shape_index)
+            .collect()
+    }
+
     pub fn deselect_control_points(&mut self, control_points: &[ShapePointIndex]) {
         control_points.iter().for_each(|index| {
             self.control_points.remove(index);
@@ -116,24 +128,26 @@ pub struct ShapeEditorMemory {
     transform: Transform,
     shape_control_points: ShapeControlPoints,
     grid: Option<GridIndex>,
-    mouse_drag: Option<MouseDrag>,
+    interaction: Vec<Box<dyn Interaction>>,
     action_history: Vec<(Box<dyn ShapeAction>, String)>,
     last_mouse_hover_pos: Pos2,
     last_canvas_mouse_hover_pos: Pos2,
     selection: Selection,
+    snap: SnapInfo,
 }
 
 impl Default for ShapeEditorMemory {
     fn default() -> Self {
         Self {
-            transform: Transform::default(),
+            transform: Default::default(),
             shape_control_points: Default::default(),
             grid: None,
-            mouse_drag: None,
+            interaction: Vec::new(),
             action_history: Vec::new(),
             last_mouse_hover_pos: Pos2::ZERO,
             last_canvas_mouse_hover_pos: Pos2::ZERO,
-            selection: Selection::default(),
+            selection: Default::default(),
+            snap: Default::default(),
         }
     }
 }
@@ -242,6 +256,29 @@ impl<'a> ShapeEditor<'a> {
 
     pub fn selection(&self, ctx: &Context) -> Selection {
         memory_mut(self.id, ctx, |mem| mem.selection.clone())
+    }
+
+    pub fn selection_shapes_params(&mut self, ctx: &Context) -> ShapesParams {
+        ShapesParams::extract(self.shape, self.selection(ctx).shapes())
+    }
+
+    pub fn apply_shapes_params(&mut self, ctx: &Context, params: ShapesParams) {
+        memory_mut(self.id, ctx, |mem| {
+            self.apply_action(ApplyShapeParams(params.0), mem)
+        })
+    }
+
+    pub fn apply_common_shapes_params(
+        &mut self,
+        ctx: &Context,
+        params: BTreeMap<ParamType, ParamValue>,
+    ) {
+        memory_mut(self.id, ctx, |mem| {
+            self.apply_action(
+                ApplyShapeParams::from_common(params, mem.selection.shapes()),
+                mem,
+            )
+        })
     }
 }
 

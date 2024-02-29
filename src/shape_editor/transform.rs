@@ -37,6 +37,7 @@ impl Transform {
     }
 
     pub fn combine(outer: &Self, inner: &Self) -> Self {
+        puffin_egui::puffin::profile_function!();
         let min = outer.0.to().min + (inner.0.to().min - inner.0.from().min) * outer.scale();
 
         Self(RectTransform::from_to(
@@ -50,26 +51,31 @@ impl Transform {
     }
 
     pub fn transform_shape(&self, shape: &Shape) -> Shape {
+        puffin_egui::puffin::profile_function!();
         let mut shape = shape.clone();
         TransformShape::transform(self.clone(), &mut shape);
         shape
     }
 
     pub fn translate_shape(&self, shape: &Shape) -> Shape {
+        puffin_egui::puffin::profile_function!();
         let mut shape = shape.clone();
         TransformShape::transform(self.to_translate_only(), &mut shape);
         shape
     }
 
     pub fn transform_pos(&self, pos: Pos2) -> Pos2 {
+        puffin_egui::puffin::profile_function!();
         self.0.transform_pos(pos)
     }
 
     pub fn transform_x(&self, x: f32) -> f32 {
+        puffin_egui::puffin::profile_function!();
         self.transform_pos(Pos2::new(x, 0.0)).x
     }
 
     pub fn transform_y(&self, y: f32) -> f32 {
+        puffin_egui::puffin::profile_function!();
         self.transform_pos(Pos2::new(0.0, y)).y
     }
 
@@ -78,22 +84,26 @@ impl Transform {
     }
 
     pub fn transform_rect(&self, rect: &Rect) -> Rect {
+        puffin_egui::puffin::profile_function!();
         self.0.transform_rect(*rect)
     }
 
     pub fn transform_x_rangef(&self, range: &Rangef) -> Rangef {
+        puffin_egui::puffin::profile_function!();
         self.0
             .transform_rect(Rect::from_x_y_ranges(*range, Rangef::NOTHING))
             .x_range()
     }
 
     pub fn transform_y_rangef(&self, range: &Rangef) -> Rangef {
+        puffin_egui::puffin::profile_function!();
         self.0
             .transform_rect(Rect::from_x_y_ranges(Rangef::NOTHING, *range))
             .y_range()
     }
 
     pub fn resize_at(&self, delta: f32, point: Pos2) -> Self {
+        puffin_egui::puffin::profile_function!();
         let from = *self.0.from();
         let to = Rect::from_min_size(self.0.to().min, self.0.from().size() * self.scale() * delta);
         let transformed_point = self.inverse().transform_pos(point);
@@ -103,6 +113,7 @@ impl Transform {
     }
 
     pub fn translate(&self, translate: Vec2) -> Self {
+        puffin_egui::puffin::profile_function!();
         Self(RectTransform::from_to(
             *self.0.from(),
             self.0.to().translate(translate),
@@ -110,6 +121,7 @@ impl Transform {
     }
 
     pub fn to_translate_only(&self) -> Self {
+        puffin_egui::puffin::profile_function!();
         Self(RectTransform::from_to(
             *self.0.from(),
             Rect::from_min_size(self.0.to().min, self.0.from().size()),
@@ -117,6 +129,7 @@ impl Transform {
     }
 
     pub fn inverse(&self) -> Self {
+        puffin_egui::puffin::profile_function!();
         Self(self.0.inverse())
     }
 }

@@ -3,7 +3,7 @@ use crate::shape_editor::utils;
 use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::{HashMap, HashSet};
 use egui::{Pos2, Rect};
-use num_traits::Bounded;
+use num_traits::{Bounded, Zero};
 use ordered_float::{FloatCore, NotNan};
 use std::collections::btree_map;
 use std::collections::BTreeMap;
@@ -11,7 +11,6 @@ use std::hash::Hash;
 use std::ops::{RangeBounds, Sub};
 
 pub type SnapComponent = (f32, HashSet<ShapePointIndex>);
-pub type SnapPoint = (Option<SnapComponent>, Option<SnapComponent>);
 
 #[derive(Clone, Default, Debug)]
 pub struct FloatIndex<K: FloatCore, V>(pub BTreeMap<NotNan<K>, HashSet<V>>);
@@ -38,29 +37,33 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
         key: NotNan<K>,
         max_distance: NotNan<K>,
         ignore_values: &HashSet<V>,
-    ) -> Option<(&NotNan<K>, HashSet<V>)> {
-        let d = max_distance.abs();
-        [
-            self.0
-                .range(key - d..=key)
-                .filter(|(_, value)| {
-                    ignore_values.is_empty()
-                        || value.iter().any(|value| !ignore_values.contains(value))
-                })
-                .last()
-                .map(|(key, value)| (key, value.sub(ignore_values))),
-            self.0
-                .range(key..=key + d)
-                .filter(|(_, value)| {
-                    ignore_values.is_empty()
-                        || value.iter().any(|value| !ignore_values.contains(value))
-                })
-                .next()
-                .map(|(key, value)| (key, value.sub(ignore_values))),
-        ]
-        .into_iter()
-        .flatten()
-        .min_by_key(|(k, _)| NotNan::new(k.sub(key).abs()).unwrap_or(NotNan::max_value()))
+    ) -> Option<(NotNan<K>, HashSet<V>)> {
+        if max_distance != NotNan::zero() {
+            let d = max_distance.abs();
+            [
+                self.0
+                    .range(key - d..=key)
+                    .filter(|(_, value)| {
+                        ignore_values.is_empty()
+                            || value.iter().any(|value| !ignore_values.contains(value))
+                    })
+                    .last()
+                    .map(|(key, value)| (*key, value.sub(ignore_values))),
+                self.0
+                    .range(key..=key + d)
+                    .filter(|(_, value)| {
+                        ignore_values.is_empty()
+                            || value.iter().any(|value| !ignore_values.contains(value))
+                    })
+                    .next()
+                    .map(|(key, value)| (*key, value.sub(ignore_values))),
+            ]
+            .into_iter()
+            .flatten()
+            .min_by_key(|(k, _)| NotNan::new(k.sub(key).abs()).unwrap_or(NotNan::max_value()))
+        } else {
+            self.0.get(&key).map(|value| (key, value.clone()))
+        }
     }
 
     pub fn insert(&mut self, key: NotNan<K>, value: V) {
@@ -116,33 +119,6 @@ impl ShapeControlPointsIndex {
             .collect()
     }
 
-    pub fn find_closest_point_in_distance(
-        &self,
-        pos: Pos2,
-        max_distance: f32,
-    ) -> Vec<(Pos2, ShapePointIndex)> {
-        let not_nan_pos = not_nan_pos2(pos);
-        let x_points = self
-            .x_index
-            .find_in_distance(not_nan_pos.0, not_nan_f32(max_distance));
-        let y_points = self
-            .y_index
-            .find_in_distance(not_nan_pos.1, not_nan_f32(max_distance));
-        let y_points_index: HashMap<ShapePointIndex, NotNan<f32>> = y_points
-            .flat_map(|(y, y_index_set)| y_index_set.iter().map(|index| (*index, *y)))
-            .collect();
-        x_points
-            .flat_map(|(x, index_set)| {
-                index_set.iter().filter_map(|index| {
-                    y_points_index.get(index).and_then(|y| {
-                        let point_pos = Pos2::new(x.into_inner(), y.into_inner());
-                        (point_pos.distance(pos) <= max_distance).then_some((point_pos, *index))
-                    })
-                })
-            })
-            .collect()
-    }
-
     pub fn find_points_in_rect(&self, rect: &Rect) -> Vec<(Pos2, ShapePointIndex)> {
         let x_points = self
             .x_index
@@ -164,25 +140,12 @@ impl ShapeControlPointsIndex {
             .collect()
     }
 
-    pub fn find_position_by_index(&self, index: ShapePointIndex) -> Option<Pos2> {
-        self.x_index
-            .0
-            .iter()
-            .find_map(|(x, i)| i.contains(&index).then_some(x))
-            .and_then(|x| {
-                self.y_index.0.iter().find_map(|(y, i)| {
-                    i.contains(&index)
-                        .then_some(Pos2::new(x.into_inner(), y.into_inner()))
-                })
-            })
-    }
-
-    pub fn snap_point(
+    pub fn snap_x(
         &self,
         pos: Pos2,
         max_distance: f32,
         ignore: &HashSet<ShapePointIndex>,
-    ) -> SnapPoint {
+    ) -> Option<SnapComponent> {
         let x = self
             .x_index
             .find_closest_in_distance_and_ignore(
@@ -191,6 +154,15 @@ impl ShapeControlPointsIndex {
                 ignore,
             )
             .map(|(x, index)| (x.into_inner(), index));
+        x
+    }
+
+    pub fn snap_y(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+        ignore: &HashSet<ShapePointIndex>,
+    ) -> Option<SnapComponent> {
         let y = self
             .y_index
             .find_closest_in_distance_and_ignore(
@@ -199,7 +171,7 @@ impl ShapeControlPointsIndex {
                 ignore,
             )
             .map(|(y, index)| (y.into_inner(), index));
-        (x, y)
+        y
     }
 
     pub fn clear(&mut self) {
@@ -225,6 +197,7 @@ pub(crate) struct GridIndex {
 
 impl GridIndex {
     pub fn from_transform(transform: &CanvasTransform) -> Self {
+        puffin_egui::puffin::profile_function!();
         let mut slf = Self::default();
         let canvas_viewport = transform.canvas_content_viewport();
         let x_range = canvas_viewport.x_range();
@@ -264,29 +237,38 @@ impl GridIndex {
         slf
     }
 
-    pub fn snap_point(
+    pub fn snap_x(
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: HashSet<GridLineType>,
-    ) -> (Option<f32>, Option<f32>) {
+        ignore: &HashSet<GridLineType>,
+    ) -> Option<f32> {
         let x = self
             .horizontal
             .find_closest_in_distance_and_ignore(
                 not_nan_f32(pos.x),
                 not_nan_f32(max_distance),
-                &ignore,
+                ignore,
             )
             .map(|(x, _)| x.into_inner());
+        x
+    }
+
+    pub fn snap_y(
+        &self,
+        pos: Pos2,
+        max_distance: f32,
+        ignore: &HashSet<GridLineType>,
+    ) -> Option<f32> {
         let y = self
-            .horizontal
+            .vertical
             .find_closest_in_distance_and_ignore(
                 not_nan_f32(pos.y),
                 not_nan_f32(max_distance),
-                &ignore,
+                ignore,
             )
             .map(|(y, _)| y.into_inner());
-        (x, y)
+        y
     }
 
     pub fn add_horizontal(&mut self, x: f32, line_type: GridLineType) {

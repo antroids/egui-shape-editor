@@ -17,6 +17,7 @@ members = [
 ]
 
 [dependencies]
+derivative = "2.2.0"
 dyn-clone = "1.0.16"
 egui = "0.26.2"
 egui_extras = "0.26.2"
@@ -24,3 +25,4 @@ itertools = "0.12.1"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
 strum = { version = "0.26.1", features = ["derive"] }
+puffin_egui = "0.26.0"

@@ -9,7 +9,7 @@ use dyn_clone::DynClone;
 use egui::ahash::{HashMap, HashSet};
 use egui::emath::Pos2;
 use egui::epaint::{CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
-use egui::{Color32, Rect, Shape, Stroke, Vec2};
+use egui::{Color32, Mesh, Rect, Shape, Stroke, Vec2};
 use itertools::Itertools;
 use std::mem;
 use std::ops::{AddAssign, DerefMut, Neg};
@@ -42,10 +42,13 @@ impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
         &mut self,
         index: ShapePointIndex,
         point: &mut Pos2,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         if let Some(translation) = self.0.remove(&index) {
             point.add_assign(translation);
+            if shape_type == ShapeType::Circle {
+                self.0.remove(&index.next_point());
+            }
         }
         if self.0.is_empty() {
             Some(())
@@ -59,10 +62,12 @@ impl IndexedShapeControlPointsVisitor for MoveShapeControlPoints {
         index: ShapePointIndex,
         control_point: &mut Pos2,
         _connected_points: HashMap<ShapePointIndex, Pos2>,
-        _shape_type: ShapeType,
+        shape_type: ShapeType,
     ) -> Option<()> {
         if let Some(translation) = self.0.remove(&index) {
-            control_point.add_assign(translation);
+            if shape_type != ShapeType::Circle || !self.0.contains_key(&index.prev_point()) {
+                control_point.add_assign(translation);
+            }
         }
         if self.0.is_empty() {
             Some(())
@@ -205,6 +210,33 @@ impl InsertShape {
 
     pub fn rect_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
         Shape::rect_stroke(Rect::from_two_pos(start_point, end_point), 0.0, stroke).into()
+    }
+
+    pub fn mesh_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
+        let mut mesh = Mesh::default();
+        let third_point = start_point + (start_point - end_point).rot90();
+        let first_vertex_index = mesh.vertices.len() as u32;
+        mesh.vertices.push(Vertex {
+            pos: start_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.vertices.push(Vertex {
+            pos: end_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.vertices.push(Vertex {
+            pos: third_point,
+            uv: Pos2::ZERO,
+            color: stroke.color,
+        });
+        mesh.add_triangle(
+            first_vertex_index,
+            first_vertex_index + 1,
+            first_vertex_index + 2,
+        );
+        Shape::mesh(mesh).into()
     }
 }
 

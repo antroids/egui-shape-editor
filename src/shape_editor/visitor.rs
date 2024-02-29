@@ -69,11 +69,12 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
     where
         Self: Sized,
     {
+        puffin_egui::puffin::profile_function!();
         visit_shape(self, shape)
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ShapeType {
     Circle,
     LineSegment,
@@ -204,6 +205,7 @@ pub trait IndexedShapesVisitor<R = ()> {
     }
 
     fn indexed_single_shape(&mut self, index: usize, shape: &mut Shape) -> Option<R> {
+        puffin_egui::puffin::profile_function!();
         match shape {
             Shape::Noop => self.indexed_none(index),
             Shape::Vec(_) => None,

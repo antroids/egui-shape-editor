@@ -31,12 +31,12 @@ cargo run -p simple
 The project is in Proof Of Concept stage. Any public API can be changed in following releases.
 
 ### TODO
-- [ ] Fix Circles and Rectangles transform
+- [x] Fix Circles and Rectangles transform
 
-- [ ] Delete action
-- [ ] Modify shape action
-  - [ ] Modify stroke
-  - [ ] Fill
+- [x] Delete action
+- [x] Modify shape action
+  - [x] Modify stroke
+  - [x] Fill
 - [ ] Add point to path action
 - [ ] Selection edit
   - [ ] Resize
