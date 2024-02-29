@@ -25,6 +25,4 @@ itertools = "0.12.1"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
 strum = { version = "0.26.1", features = ["derive"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 puffin_egui = "0.26.0"

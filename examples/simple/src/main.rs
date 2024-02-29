@@ -81,15 +81,18 @@ impl Default for App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
-        egui::TopBottomPanel::new(TopBottomSide::Bottom, "Bottom panel").show(ctx, |ui| {
-            let mut profile = puffin_egui::puffin::are_scopes_on();
-            ui.checkbox(&mut profile, "Show profiler window");
-            puffin_egui::puffin::set_scopes_on(profile); // controls both the profile capturing, and the displaying of it
-            if profile {
-                puffin_egui::profiler_window(ctx);
-            }
-        });
-        puffin_egui::puffin::profile_function!();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            egui::TopBottomPanel::new(TopBottomSide::Bottom, "Bottom panel").show(ctx, |ui| {
+                let mut profile = puffin_egui::puffin::are_scopes_on();
+                ui.checkbox(&mut profile, "Show profiler window");
+                puffin_egui::puffin::set_scopes_on(profile); // controls both the profile capturing, and the displaying of it
+                if profile {
+                    puffin_egui::profiler_window(ctx);
+                }
+            });
+            puffin_egui::puffin::profile_function!();
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             let style = Light::default();
             let mut editor =
