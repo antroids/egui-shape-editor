@@ -10,6 +10,7 @@ use egui_shape_editor::shape_editor::style::Light;
 use egui_shape_editor::shape_editor::{
     ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions,
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::Into;
 use std::ops::{BitOrAssign, RangeInclusive};
 
@@ -35,7 +36,6 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-// When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
 fn main() {
     // Redirect `log` message to `console.log` and friends:
@@ -48,7 +48,28 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|_| Box::<App>::default()),
+                {
+                    use base64::prelude::*;
+                    let mut app = App::default();
+                    if let Some(hash_string) =
+                        web_sys::window().and_then(|window| window.location().hash().ok())
+                    {
+                        if hash_string.starts_with("#") {
+                            match BASE64_STANDARD.decode(&hash_string[1..]) {
+                                Ok(decoded) => {
+                                    match rmp_serde::from_slice::<ShapeWrapper>(&decoded) {
+                                        Ok(ShapeWrapper(shape)) => app.shape = shape,
+                                        Err(err) => {
+                                            log::warn!("Cannot deserialize Shape: {:}", err)
+                                        }
+                                    }
+                                }
+                                Err(err) => log::warn!("Cannot deserialize Shape: {}", err),
+                            }
+                        }
+                    }
+                    Box::new(|_| Box::new(app))
+                },
             )
             .await
             .expect("failed to start eframe");
@@ -63,17 +84,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            shape: Shape::CubicBezier(CubicBezierShape::from_points_stroke(
-                [
-                    [5.0, 5.0].into(),
-                    [50.0, 200.0].into(),
-                    [150.0, 200.0].into(),
-                    [300.0, 300.0].into(),
-                ],
-                false,
-                Color32::TRANSPARENT,
-                Stroke::new(5.0, Color32::GREEN),
-            )),
+            shape: Shape::Noop,
             options: ShapeEditorOptions::default(),
         }
     }
@@ -83,6 +94,8 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         #[cfg(not(target_arch = "wasm32"))]
         {
+            puffin_egui::puffin::profile_function!();
+
             egui::TopBottomPanel::new(TopBottomSide::Bottom, "Bottom panel").show(ctx, |ui| {
                 let mut profile = puffin_egui::puffin::are_scopes_on();
                 ui.checkbox(&mut profile, "Show profiler window");
@@ -91,8 +104,33 @@ impl eframe::App for App {
                     puffin_egui::profiler_window(ctx);
                 }
             });
-            puffin_egui::puffin::profile_function!();
         }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use base64::prelude::*;
+            use web_time::Instant;
+            static mut LAST_SERIALIZED: Option<Instant> = None;
+
+            unsafe {
+                if LAST_SERIALIZED.is_none()
+                    || LAST_SERIALIZED
+                        .is_some_and(|time| time.elapsed() > std::time::Duration::from_secs(1))
+                {
+                    if let Ok(serialized) = rmp_serde::to_vec(&ShapeWrapper(self.shape.clone())) {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window
+                                .location()
+                                .set_hash(&BASE64_STANDARD.encode(serialized));
+                        } else {
+                            log::warn!("Cannot serialize Shape, browser window is unreachable");
+                        }
+                    }
+                    LAST_SERIALIZED = Some(Instant::now());
+                }
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             let style = Light::default();
             let mut editor =
@@ -292,4 +330,49 @@ fn rounding_param_widget<'a, L: Into<WidgetText> + 'a>(
         *value = enabled.then(|| ParamValue::Rounding(rounding));
         response
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(remote = "egui::epaint::Shape")]
+enum ShapeAdapter {
+    Noop,
+    Vec(
+        #[serde(
+            serialize_with = "serialize_vec_shape",
+            deserialize_with = "deserialize_vec_shape"
+        )]
+        Vec<Shape>,
+    ),
+    Circle(egui::epaint::CircleShape),
+    LineSegment {
+        points: [egui::Pos2; 2],
+        stroke: Stroke,
+    },
+    Path(egui::epaint::PathShape),
+    Rect(egui::epaint::RectShape),
+    Text(egui::epaint::TextShape),
+    Mesh(egui::epaint::Mesh),
+    QuadraticBezier(egui::epaint::QuadraticBezierShape),
+    CubicBezier(CubicBezierShape),
+    #[serde(skip)]
+    Callback(egui::epaint::PaintCallback),
+}
+
+#[derive(Serialize, Deserialize)]
+struct ShapeWrapper(#[serde(with = "ShapeAdapter")] Shape);
+
+fn serialize_vec_shape<S>(val: &Vec<Shape>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let vec: Vec<ShapeWrapper> = val.iter().map(|s| ShapeWrapper(s.clone())).collect();
+    vec.serialize(serializer)
+}
+
+fn deserialize_vec_shape<'de, D>(deserializer: D) -> Result<Vec<Shape>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Vec::deserialize(deserializer)?;
+    Ok(v.into_iter().map(|ShapeWrapper(a)| a).collect())
 }
