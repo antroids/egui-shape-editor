@@ -9,11 +9,14 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egui = "0.26.2"
+egui =  { version = "0.26.2", features = ["serde"] }
 eframe = { version = "0.26.2", features = ["glow", "default_fonts", "puffin"]}
 log = "0.4"
 env_logger = "0.11.0"
 egui-shape-editor = { path="../.." }
+serde = "1.0.197"
+
+
 
 # non web
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -22,6 +25,10 @@ puffin_egui = "0.26.0"
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
+web-sys = "0.3.68"
+base64 = "0.21.7"
+rmp-serde = "1.1.2"
+web-time = "1.0.0"
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
