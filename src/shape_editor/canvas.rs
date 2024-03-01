@@ -14,7 +14,6 @@ use egui::{
     Stroke, Ui, Vec2,
 };
 use itertools::Itertools;
-use std::ops::Mul;
 use strum::EnumIter;
 use strum::IntoEnumIterator;
 
@@ -101,6 +100,8 @@ pub(crate) struct CanvasInput {
     pub drag_released: bool,
     pub action_modifier: ActionModifier,
     pub keyboard_action: Option<KeyboardAction>,
+    pub mouse_scroll_delta: Vec2,
+    pub mouse_zoom_delta: f32,
 }
 
 impl CanvasInput {
@@ -122,6 +123,8 @@ impl CanvasInput {
             action_modifier,
             mouse_primary_clicked,
             canvas_action,
+            mouse_scroll_delta,
+            mouse_zoom_delta,
         ) = ui.input_mut(|input| {
             (
                 input.pointer.primary_pressed(),
@@ -136,6 +139,8 @@ impl CanvasInput {
                             .unwrap_or(canvas_action.default_keyboard_shortcut()),
                     )
                 }),
+                input.smooth_scroll_delta,
+                input.zoom_delta(),
             )
         });
         let drag_started = response.drag_started();
@@ -153,6 +158,8 @@ impl CanvasInput {
             drag_started,
             drag_released,
             keyboard_action: canvas_action,
+            mouse_scroll_delta,
+            mouse_zoom_delta,
         }
     }
 
@@ -215,8 +222,8 @@ impl<'a> ShapeEditor<'a> {
         paint_canvas_background(&ctx, self.style);
         self.handle_actions(memory, &ctx);
         update_snap_point(&ctx, memory, &self.options);
+        memory.current_frame_interactions(&ctx);
         memory.update_interaction(self.shape, self.style, &self.options, &ctx);
-        handle_scroll_and_zoom(memory, ui, &self.options, ctx.input.canvas_mouse_hover_pos);
         ctx.transform = CanvasTransform::new(canvas_rect, &memory.transform);
 
         let mut ui_shape = ctx
@@ -250,7 +257,7 @@ impl<'a> ShapeEditor<'a> {
         paint_snap_point_highlight(&ctx, &memory.snap, self.style);
         paint_canvas_border(&ctx, self.style);
 
-        memory.try_begin_interaction(&ctx);
+        memory.next_frame_interactions(&ctx);
 
         if !egui_ctx.is_context_menu_open() {
             if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
@@ -374,40 +381,6 @@ fn update_snap_point(
         );
     } else {
         memory.clear_snap_point();
-    }
-}
-
-fn handle_scroll_and_zoom(
-    memory: &mut ShapeEditorMemory,
-    ui: &mut Ui,
-    options: &ShapeEditorOptions,
-    mouse_hover_pos: Option<Pos2>,
-) {
-    puffin_egui::puffin::profile_function!();
-    let (scroll_delta, zoom_delta) =
-        ui.input(|input| (input.smooth_scroll_delta, input.zoom_delta()));
-    if scroll_delta != Vec2::ZERO {
-        memory.update_transform(
-            memory
-                .transform
-                .translate(scroll_delta.mul(options.scroll_factor)),
-        );
-    }
-    if let Some(canvas_hover_pos) = mouse_hover_pos {
-        if zoom_delta != 1.0 {
-            let new_transform = memory
-                .transform
-                .resize_at(zoom_delta.powf(options.zoom_factor), canvas_hover_pos);
-            let new_transform_scale = new_transform.scale();
-            let range = &options.scaling_range;
-            if range.start.x <= new_transform_scale.x
-                && range.start.y <= new_transform_scale.y
-                && range.end.x >= new_transform_scale.x
-                && range.end.y >= new_transform_scale.y
-            {
-                memory.update_transform(new_transform);
-            }
-        }
     }
 }
 

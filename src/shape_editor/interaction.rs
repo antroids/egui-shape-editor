@@ -3,10 +3,12 @@ use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::style::Style;
 use crate::shape_editor::{action, utils, ShapeEditorMemory, ShapeEditorOptions};
 use dyn_clone::DynClone;
-use egui::{Pos2, Rect, Shape};
+use egui::{Pos2, Rect, Shape, Vec2};
+use std::mem;
+use std::ops::Mul;
 
 impl ShapeEditorMemory {
-    pub(crate) fn try_begin_interaction(&mut self, ctx: &CanvasContext) {
+    pub(crate) fn next_frame_interactions(&mut self, ctx: &CanvasContext) {
         puffin_egui::puffin::profile_function!();
         let mouse_pos = ctx.input.mouse_pos;
         if ctx.input.primary_drag_started() {
@@ -26,9 +28,18 @@ impl ShapeEditorMemory {
                 rect: Rect::from_min_max(mouse_pos, mouse_pos),
             });
         } else if ctx.input.secondary_drag_started() {
-            self.begin_interaction(Scroll {
+            self.begin_interaction(Pan {
                 start_pos: mouse_pos,
             });
+        }
+    }
+
+    pub(crate) fn current_frame_interactions(&mut self, ctx: &CanvasContext) {
+        puffin_egui::puffin::profile_function!();
+        if ctx.input.mouse_zoom_delta != 1.0 {
+            self.begin_interaction(Zoom);
+        } else if ctx.input.mouse_scroll_delta != Vec2::ZERO {
+            self.begin_interaction(Scroll);
         }
     }
 
@@ -39,7 +50,8 @@ impl ShapeEditorMemory {
         options: &ShapeEditorOptions,
         ctx: &CanvasContext,
     ) {
-        if let Some(interaction) = self.interaction.pop() {
+        let interactions = mem::replace(&mut self.interaction, Vec::new());
+        for interaction in interactions {
             if let Some(result) = interaction.update(self, shape, style, options, ctx) {
                 self.interaction.push(result)
             }
@@ -75,7 +87,7 @@ struct Selection {
 }
 
 #[derive(Clone)]
-struct Scroll {
+struct Pan {
     start_pos: Pos2,
 }
 
@@ -85,6 +97,12 @@ pub(crate) struct AddPointsThanShape {
     points_count: usize,
     shape_fn: fn(&Vec<Pos2>, &ShapeEditorOptions) -> Option<Shape>,
 }
+
+#[derive(Clone)]
+struct Scroll;
+
+#[derive(Clone)]
+struct Zoom;
 
 impl Interaction for MoveShapeControlPoints {
     fn update(
@@ -159,7 +177,7 @@ impl Interaction for Selection {
     }
 }
 
-impl Interaction for Scroll {
+impl Interaction for Pan {
     fn update(
         mut self: Box<Self>,
         memory: &mut ShapeEditorMemory,
@@ -228,6 +246,52 @@ impl Interaction for AddPointsThanShape {
             }
             None
         }
+    }
+}
+
+impl Interaction for Scroll {
+    fn update(
+        self: Box<Self>,
+        memory: &mut ShapeEditorMemory,
+        _shape: &mut Shape,
+        _style: &dyn Style,
+        options: &ShapeEditorOptions,
+        ctx: &CanvasContext,
+    ) -> Option<Box<dyn Interaction>> {
+        memory.update_transform(
+            memory
+                .transform
+                .translate(ctx.input.mouse_scroll_delta.mul(options.scroll_factor)),
+        );
+        None
+    }
+}
+
+impl Interaction for Zoom {
+    fn update(
+        self: Box<Self>,
+        memory: &mut ShapeEditorMemory,
+        _shape: &mut Shape,
+        _style: &dyn Style,
+        options: &ShapeEditorOptions,
+        ctx: &CanvasContext,
+    ) -> Option<Box<dyn Interaction>> {
+        if let Some(canvas_hover_pos) = ctx.input.canvas_mouse_hover_pos {
+            let new_transform = memory.transform.resize_at(
+                ctx.input.mouse_zoom_delta.powf(options.zoom_factor),
+                canvas_hover_pos,
+            );
+            let new_transform_scale = new_transform.scale();
+            let range = &options.scaling_range;
+            if range.start.x <= new_transform_scale.x
+                && range.start.y <= new_transform_scale.y
+                && range.end.x >= new_transform_scale.x
+                && range.end.y >= new_transform_scale.y
+            {
+                memory.update_transform(new_transform);
+            }
+        }
+        None
     }
 }
 
