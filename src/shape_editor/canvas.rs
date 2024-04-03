@@ -1,4 +1,3 @@
-use crate::shape_editor::action::{AddShapePoints, InsertShape, RemoveShapePoints, ShapePoint};
 use crate::shape_editor::{
     grid, style, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory, ShapeEditorOptions,
 };
@@ -7,10 +6,10 @@ use super::transform::Transform;
 use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::snap::paint_snap_point_highlight;
-use crate::shape_editor::visitor::{LastShapePointIndex, ShapePointIndex, ShapeType};
+use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::HashMap;
 use egui::{
-    Color32, Context, Key, KeyboardShortcut, Modifiers, Painter, Pos2, Rect, Response, Sense,
+    Color32, Context, Key, KeyboardShortcut, Modifiers, Painter, Pos2, Rect, Response, Shape,
     Stroke, Ui, Vec2,
 };
 use itertools::Itertools;
@@ -36,6 +35,7 @@ impl ActionModifier {
 #[derive(Debug)]
 pub(crate) struct CanvasTransform {
     pub ui_to_canvas: Transform,
+    pub canvas_content_to_canvas: Transform,
     pub canvas_content_to_ui: Transform,
     pub ui_to_canvas_content: Transform,
 }
@@ -46,11 +46,13 @@ impl CanvasTransform {
             Rect::from_min_size(Pos2::ZERO, canvas_rect.size()),
             canvas_rect,
         );
+        let canvas_content_to_canvas = content_transform.clone();
         let ui_to_canvas = canvas_to_ui.inverse();
         let canvas_content_to_ui = Transform::combine(&canvas_to_ui, content_transform);
         let ui_to_canvas_content = canvas_content_to_ui.inverse();
         Self {
             ui_to_canvas,
+            canvas_content_to_canvas,
             canvas_content_to_ui,
             ui_to_canvas_content,
         }
@@ -176,15 +178,21 @@ pub(crate) struct CanvasContext {
     pub(crate) transform: CanvasTransform,
     pub(crate) input: CanvasInput,
     pub(crate) painter: Painter,
+    pub(crate) grid_index: GridIndex,
+    pub(crate) hovered_ui_shape_points: HashMap<ShapePointIndex, ShapeControlPoint>,
+    pub(crate) ui_shape: Shape,
+    pub(crate) ui_shape_control_points: ShapeControlPoints,
 }
 
 impl CanvasContext {
-    fn new(
+    pub(crate) fn new(
+        shape: &Shape,
         canvas_rect: Rect,
         options: &ShapeEditorOptions,
-        memory: &ShapeEditorMemory,
+        memory: &mut ShapeEditorMemory,
         response: &Response,
         ui: &Ui,
+        style: &dyn style::Style,
     ) -> Self {
         let transform = CanvasTransform::new(canvas_rect, &memory.transform);
         let input = CanvasInput::new(
@@ -195,10 +203,24 @@ impl CanvasContext {
             memory.last_mouse_hover_pos,
         );
         let painter = ui.painter_at(canvas_rect);
+        let grid_index = memory
+            .grid
+            .get_or_insert_with(|| GridIndex::from_transform(&transform))
+            .clone();
+        let mut ui_shape = transform.canvas_content_to_ui.transform_shape(shape);
+        let ui_shape_control_points = ShapeControlPoints::collect(&mut ui_shape);
+        let hovered_ui_shape_points = input
+            .mouse_hover_pos
+            .map(|pos| ui_shape_control_points.points_in_radius(pos, style.control_point_radius()))
+            .unwrap_or_default();
         Self {
             transform,
             input,
             painter,
+            grid_index,
+            ui_shape,
+            hovered_ui_shape_points,
+            ui_shape_control_points,
         }
     }
 }
@@ -206,54 +228,25 @@ impl CanvasContext {
 impl<'a> ShapeEditor<'a> {
     pub(crate) fn show_canvas(
         &mut self,
-        ui: &mut Ui,
+        response: Response,
         egui_ctx: &Context,
-        outer_rect: Rect,
+        ctx: &CanvasContext,
         memory: &mut ShapeEditorMemory,
     ) -> ShapeEditorCanvasResponse {
         puffin_egui::puffin::profile_function!();
-
-        let margins = self.style.rulers_margins();
-        let canvas_rect = margins.shrink_rect(outer_rect);
-        let response = ui.allocate_rect(canvas_rect, Sense::drag());
-        let mut ctx = CanvasContext::new(canvas_rect, &self.options, memory, &response, ui);
-
         self.canvas_context_menu(response.clone(), memory, &ctx);
         paint_canvas_background(&ctx, self.style);
-        self.handle_actions(memory, &ctx);
+
+        memory.shape_control_points = ShapeControlPoints::collect(self.shape);
+
+        grid::paint_grid(&ctx, self.style);
+        ctx.painter.add(ctx.ui_shape.clone());
+
         update_snap_point(&ctx, memory, &self.options);
         memory.current_frame_interactions(&ctx);
         memory.update_interaction(self.shape, self.style, &self.options, &ctx);
-        ctx.transform = CanvasTransform::new(canvas_rect, &memory.transform);
 
-        let mut ui_shape = ctx
-            .transform
-            .canvas_content_to_ui
-            .transform_shape(self.shape);
-        memory.shape_control_points = ShapeControlPoints::collect(self.shape);
-        let ui_shape_control_points = ShapeControlPoints::collect(&mut ui_shape);
-        let hovered_ui_shape_points = ctx
-            .input
-            .mouse_hover_pos
-            .map(|pos| {
-                ui_shape_control_points.points_in_radius(pos, self.style.control_point_radius())
-            })
-            .unwrap_or_default();
-
-        let grid_index = memory
-            .grid
-            .get_or_insert_with(|| GridIndex::from_transform(&ctx.transform));
-        grid::paint_grid(&ctx, self.style, grid_index);
-        ctx.painter.add(ui_shape);
-        handle_primary_pressed(&ctx, &hovered_ui_shape_points, memory);
-
-        paint_shape_control_points(
-            &ui_shape_control_points,
-            &ctx,
-            memory,
-            self.style,
-            &hovered_ui_shape_points,
-        );
+        paint_shape_control_points(&ctx, memory, self.style);
         paint_snap_point_highlight(&ctx, &memory.snap, self.style);
         paint_canvas_border(&ctx, self.style);
 
@@ -268,103 +261,6 @@ impl<'a> ShapeEditor<'a> {
             }
         }
         ShapeEditorCanvasResponse { response }
-    }
-
-    fn handle_actions(&mut self, memory: &mut ShapeEditorMemory, ctx: &CanvasContext) {
-        puffin_egui::puffin::profile_function!();
-        if let Some(keyboard_action) = ctx.input.keyboard_action {
-            match keyboard_action {
-                KeyboardAction::AddPoint => self.handle_add_point(memory, ctx.input.mouse_pos),
-                KeyboardAction::DeletePoint => {
-                    self.apply_action(
-                        RemoveShapePoints(memory.selection.control_points().clone()),
-                        memory,
-                    );
-                }
-                KeyboardAction::Undo => {
-                    memory.undo(self.shape);
-                }
-            }
-        } else if ctx.input.action_modifier.add_point_on_click() && ctx.input.mouse_primary_clicked
-        {
-            self.handle_add_point(
-                memory,
-                memory
-                    .snap
-                    .snap_point
-                    .unwrap_or(ctx.input.canvas_content_mouse_pos),
-            );
-        }
-    }
-
-    fn handle_add_point(&mut self, memory: &mut ShapeEditorMemory, mouse_pos: Pos2) {
-        let Some(selected_point) = memory.selection.single_control_point() else {
-            return;
-        };
-        let Some(ShapeControlPoint::PathPoint { position, .. }) = memory
-            .shape_control_points
-            .by_index(selected_point)
-            .cloned()
-        else {
-            return;
-        };
-        if let Some(shape_type) = memory
-            .shape_control_points
-            .shape_type_by_control_point(selected_point)
-        {
-            match shape_type {
-                ShapeType::Circle => {}
-                ShapeType::LineSegment => {}
-                ShapeType::Path => {
-                    let new_point_index = selected_point.next_point();
-                    self.apply_action(
-                        AddShapePoints::single_point(new_point_index, ShapePoint::Pos(mouse_pos)),
-                        memory,
-                    );
-                    memory
-                        .selection
-                        .select_single_control_point(new_point_index);
-                }
-                ShapeType::Rect => {}
-                ShapeType::Text => {}
-                ShapeType::Mesh => {}
-                ShapeType::QuadraticBezier => {
-                    let control_point = memory
-                        .shape_control_points
-                        .connected_bezier_control_point(selected_point);
-                    self.apply_action(
-                        InsertShape::quadratic_bezier_from_two_points(
-                            position,
-                            control_point,
-                            mouse_pos,
-                            self.options.stroke,
-                        ),
-                        memory,
-                    );
-                    if let Some(last_index) = LastShapePointIndex::last_index(self.shape) {
-                        memory.selection.select_single_control_point(last_index);
-                    }
-                }
-                ShapeType::CubicBezier => {
-                    let start_control_point = memory
-                        .shape_control_points
-                        .connected_bezier_control_point(selected_point);
-                    self.apply_action(
-                        InsertShape::cubic_bezier_from_two_points(
-                            position,
-                            start_control_point,
-                            mouse_pos,
-                            self.options.stroke,
-                        ),
-                        memory,
-                    );
-                    if let Some(last_index) = LastShapePointIndex::last_index(self.shape) {
-                        memory.selection.select_single_control_point(last_index);
-                    }
-                }
-                ShapeType::Callback => {}
-            }
-        }
     }
 }
 
@@ -381,46 +277,6 @@ fn update_snap_point(
         );
     } else {
         memory.clear_snap_point();
-    }
-}
-
-fn handle_primary_pressed(
-    ctx: &CanvasContext,
-    hovered_ui_shape_points: &HashMap<ShapePointIndex, ShapeControlPoint>,
-    memory: &mut ShapeEditorMemory,
-) {
-    puffin_egui::puffin::profile_function!();
-    if ctx.input.canvas_mouse_hover_pos.is_some()
-        && ctx.input.mouse_primary_pressed
-        && memory.interaction.is_empty()
-    {
-        let next_selected =
-            memory
-                .selection
-                .single_control_point()
-                .and_then(|single_selected_index| {
-                    hovered_ui_shape_points
-                        .keys()
-                        .skip_while(|hovered_index| **hovered_index != *single_selected_index)
-                        .skip(1)
-                        .next()
-                        .copied()
-                });
-        if !(ctx.input.action_modifier.do_not_deselect_selected_points()
-            || ctx.input.action_modifier.add_point_on_click()
-            || ctx.input.drag_started
-                && hovered_ui_shape_points
-                    .keys()
-                    .any(|hovered_index| memory.selection.is_control_point_selected(hovered_index)))
-        {
-            memory.selection.clear_selected_control_points();
-        }
-
-        if let Some(index_to_select) =
-            next_selected.or(hovered_ui_shape_points.keys().next().copied())
-        {
-            memory.selection.select_control_point(index_to_select);
-        }
     }
 }
 
@@ -445,18 +301,17 @@ fn paint_canvas_background(ctx: &CanvasContext, style: &dyn style::Style) {
 }
 
 fn paint_shape_control_points(
-    ui_shape_control_points: &ShapeControlPoints,
     ctx: &CanvasContext,
     memory: &ShapeEditorMemory,
     style: &dyn style::Style,
-    hovered: &HashMap<ShapePointIndex, ShapeControlPoint>,
 ) {
     puffin_egui::puffin::profile_function!();
-    for (index, ui_shape_point) in ui_shape_control_points
+    for (index, ui_shape_point) in ctx
+        .ui_shape_control_points
         .iter()
         .sorted_by(|(k1, _), (k2, _)| k1.cmp(k2))
     {
-        let hovered = hovered.contains_key(index);
+        let hovered = ctx.hovered_ui_shape_points.contains_key(index);
         let selected = memory.selection.is_control_point_selected(index);
         ctx.painter
             .add(ui_shape_point.to_shape(hovered, selected, style));

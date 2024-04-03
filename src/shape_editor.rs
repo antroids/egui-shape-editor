@@ -1,5 +1,5 @@
 use crate::shape_editor::action::ShapeAction;
-use crate::shape_editor::canvas::KeyboardAction;
+use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::interaction::Interaction;
 use crate::shape_editor::shape_params::ApplyShapeParams;
@@ -202,18 +202,29 @@ pub struct ShapeEditorCanvasResponse {
 }
 
 impl<'a> ShapeEditor<'a> {
-    pub fn show(mut self, ui: &mut Ui, ctx: &Context) -> ShapeEditorResponse {
+    pub fn show(mut self, ui: &mut Ui, egui_ctx: &Context) -> ShapeEditorResponse {
         let rect = ui.available_rect_before_wrap();
         let outer_rect = rect;
-        let response = ui.allocate_rect(outer_rect, Sense::drag());
-        let mut memory = ShapeEditorMemory::load(ctx, self.id);
+        let mut memory = ShapeEditorMemory::load(egui_ctx, self.id);
+        let margins = self.style.rulers_margins();
+        let canvas_rect = margins.shrink_rect(outer_rect);
+        let response = ui.allocate_rect(canvas_rect, Sense::drag());
+        let ctx = CanvasContext::new(
+            self.shape,
+            canvas_rect,
+            &self.options,
+            &mut memory,
+            &response,
+            ui,
+            self.style,
+        );
 
-        self.show_canvas(ui, ctx, outer_rect, &mut memory);
+        self.show_canvas(response.clone(), egui_ctx, &ctx, &mut memory);
 
         let ui_painter = ui.painter();
-        rulers::paint_rulers(self.style, ui_painter, outer_rect, &memory);
+        rulers::paint_rulers(self.style, ui_painter, outer_rect, &ctx);
 
-        memory.store(ctx, self.id);
+        memory.store(egui_ctx, self.id);
 
         ShapeEditorResponse { response }
     }

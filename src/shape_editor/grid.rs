@@ -1,10 +1,10 @@
 use crate::shape_editor::canvas::CanvasContext;
-use crate::shape_editor::index::{GridIndex, GridLineType};
+use crate::shape_editor::index::GridLineType;
 use crate::shape_editor::style;
 use egui::emath::Pos2;
 use egui::epaint::Shape;
 
-pub fn paint_grid(ctx: &CanvasContext, style: &dyn style::Style, index: &GridIndex) {
+pub fn paint_grid(ctx: &CanvasContext, style: &dyn style::Style) {
     puffin_egui::puffin::profile_function!();
     let canvas_viewport = ctx.transform.canvas_content_viewport();
     let ui_x_range = ctx
@@ -18,7 +18,7 @@ pub fn paint_grid(ctx: &CanvasContext, style: &dyn style::Style, index: &GridInd
     let mut vec = Vec::new();
     let grid_line_secondary_length = style.grid_line_secondary_length();
     let grid_line_secondary_gap = style.grid_line_secondary_gap();
-    for (x, line_types) in &index.horizontal.0 {
+    for (x, line_types) in &ctx.grid_index.horizontal.0 {
         for line_type in line_types {
             let ui_x = ctx
                 .transform
@@ -47,7 +47,7 @@ pub fn paint_grid(ctx: &CanvasContext, style: &dyn style::Style, index: &GridInd
             }
         }
     }
-    for (y, line_types) in &index.vertical.0 {
+    for (y, line_types) in &ctx.grid_index.vertical.0 {
         for line_type in line_types {
             let ui_y = ctx
                 .transform

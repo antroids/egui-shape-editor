@@ -1,5 +1,6 @@
+use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::index::GridLineType;
-use crate::shape_editor::{style, ShapeEditorMemory};
+use crate::shape_editor::style;
 use egui::emath::{Pos2, Rect, Vec2};
 use egui::epaint::{Color32, Shape, TextShape};
 use egui::Painter;
@@ -9,13 +10,9 @@ pub(crate) fn paint_rulers(
     style: &dyn style::Style,
     ui_painter: &Painter,
     rulers_rect: Rect,
-    memory: &ShapeEditorMemory,
+    ctx: &CanvasContext,
 ) {
-    let Some(grid_index) = &memory.grid else {
-        return;
-    };
-
-    let transform = &memory.transform;
+    let transform = &ctx.transform.canvas_content_to_canvas;
 
     let ruler_rect = Rect::from_min_max(
         Pos2::new(rulers_rect.min.x + style.rulers_width(), rulers_rect.min.y),
@@ -23,7 +20,7 @@ pub(crate) fn paint_rulers(
     );
     let painter = ui_painter.with_clip_rect(ruler_rect);
     let mut vec = vec![Shape::rect_filled(ruler_rect, 0.0, Color32::WHITE)];
-    for (x, line_types) in &grid_index.horizontal.0 {
+    for (x, line_types) in &ctx.grid_index.horizontal.0 {
         let ui_x = transform.transform_pos(Pos2::new(x.into_inner(), 0.0)).x + ruler_rect.left();
         for line_type in line_types {
             match line_type {
@@ -78,7 +75,7 @@ pub(crate) fn paint_rulers(
     );
     let painter = ui_painter.with_clip_rect(ruler_rect);
     let mut vec = vec![Shape::rect_filled(ruler_rect, 0.0, Color32::WHITE)];
-    for (y, line_types) in &grid_index.vertical.0 {
+    for (y, line_types) in &ctx.grid_index.vertical.0 {
         let ui_y = transform.transform_pos(Pos2::new(0.0, y.into_inner())).y + ruler_rect.top();
         for line_type in line_types {
             match line_type {
