@@ -3,9 +3,10 @@ use crate::shape_editor::action::{
 };
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
 use crate::shape_editor::control_point::ShapeControlPoint;
+use crate::shape_editor::memory::ShapeEditorMemory;
 use crate::shape_editor::style::Style;
 use crate::shape_editor::visitor::{LastShapePointIndex, ShapeType};
-use crate::shape_editor::{action, utils, ShapeEditorMemory, ShapeEditorOptions};
+use crate::shape_editor::{action, utils, ShapeEditorOptions};
 use dyn_clone::DynClone;
 use egui::{Pos2, Rect, Shape, Vec2};
 use std::fmt::Debug;
@@ -18,9 +19,8 @@ impl ShapeEditorMemory {
         let mouse_pos = ctx.input.mouse_pos;
         if ctx.input.primary_drag_started() && !ctx.input.action_modifier.add_point_on_click() {
             if !ctx.input.action_modifier.do_not_deselect_selected_points() {
-                let canvas_mouse_pos = ctx.transform.ui_to_canvas_content.transform_pos(mouse_pos);
                 if let Some(closest_selected_control_point) =
-                    self.closest_selected_control_point(canvas_mouse_pos)
+                    ctx.closest_selected_control_point(self.selection())
                 {
                     self.begin_interaction(MoveShapeControlPoints {
                         start_pos: closest_selected_control_point.position(),
@@ -69,19 +69,19 @@ impl ShapeEditorMemory {
         options: &ShapeEditorOptions,
         ctx: &CanvasContext,
     ) {
-        let interactions = mem::replace(&mut self.interaction, Vec::new());
-        // if !interactions.is_empty() {
-        //     println!("Interactions for current frame: {:?}", interactions);
-        // }
+        let interactions = mem::replace(self.interaction_mut(), Vec::new());
+        if !interactions.is_empty() {
+            println!("Interactions for current frame: {:?}", interactions);
+        }
         for interaction in interactions {
             if let Some(result) = interaction.update(self, shape, style, options, ctx) {
-                self.interaction.push(result)
+                self.interaction_mut().push(result)
             }
         }
     }
 
     pub(crate) fn begin_interaction<T: Interaction + 'static>(&mut self, interaction: T) {
-        self.interaction.push(Box::new(interaction));
+        self.interaction_mut().push(Box::new(interaction));
     }
 }
 
@@ -149,9 +149,9 @@ impl Interaction for MoveShapeControlPoints {
     ) -> Option<Box<dyn Interaction>> {
         puffin_egui::puffin::profile_function!();
         if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
-            if self.end_pos != self.start_pos && memory.selection.has_control_points() {
+            if self.end_pos != self.start_pos && memory.selection().has_control_points() {
                 let move_action = action::MoveShapeControlPoints::from_index_and_translation(
-                    memory.selection.control_points(),
+                    memory.selection().control_points(),
                     &(self.end_pos - self.start_pos),
                 );
                 memory
@@ -159,13 +159,16 @@ impl Interaction for MoveShapeControlPoints {
             }
             None
         } else {
-            if self.end_pos != ctx.input.canvas_content_mouse_pos {
+            if (ctx.input.drag_delta != Vec2::ZERO
+                && self.end_pos != ctx.input.canvas_content_mouse_pos)
+                || self.end_pos != self.start_pos
+            {
                 let snap_point = memory
-                    .snap
+                    .snap()
                     .snap_point
                     .unwrap_or(ctx.input.canvas_content_mouse_pos);
                 Box::new(action::MoveShapeControlPoints::from_index_and_translation(
-                    memory.selection.control_points(),
+                    memory.selection().control_points(),
                     &(snap_point - self.end_pos),
                 ))
                 .apply(shape);
@@ -193,10 +196,9 @@ impl Interaction for Selection {
 
             if self.rect.max != self.rect.min {
                 if !ctx.input.action_modifier.do_not_deselect_selected_points() {
-                    memory.selection.clear_selected_control_points();
+                    memory.selection_mut().clear_selected_control_points();
                 }
-                memory
-                    .shape_control_points
+                ctx.shape_control_points
                     .find_points_in_rect(
                         &ctx.transform
                             .ui_to_canvas_content
@@ -204,7 +206,7 @@ impl Interaction for Selection {
                     )
                     .iter()
                     .for_each(|(_, index)| {
-                        memory.selection.select_control_point(*index);
+                        memory.selection_mut().select_control_point(*index);
                     });
                 let selection_shape = style.selection_shape(self.rect.min, self.rect.max);
                 ctx.painter.add(selection_shape);
@@ -227,11 +229,11 @@ impl Interaction for Pan {
         if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
             None
         } else {
-            // Cannot use ::update_transform method there due to borrow checks
-            memory.transform = memory
-                .transform
-                .translate(ctx.input.mouse_pos - self.start_pos);
-            memory.grid.take();
+            memory.set_transform(
+                memory
+                    .transform()
+                    .translate(ctx.input.mouse_pos - self.start_pos),
+            );
             self.start_pos = ctx.input.mouse_pos;
             Some(self)
         }
@@ -248,7 +250,7 @@ impl Interaction for AddPointsThanShape {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         let mouse_pos = memory
-            .snap
+            .snap()
             .snap_point
             .unwrap_or(ctx.input.canvas_content_mouse_pos);
         if ctx.input.mouse_primary_clicked {
@@ -295,9 +297,9 @@ impl Interaction for Scroll {
         options: &ShapeEditorOptions,
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
-        memory.update_transform(
+        memory.set_transform(
             memory
-                .transform
+                .transform()
                 .translate(ctx.input.mouse_scroll_delta.mul(options.scroll_factor)),
         );
         None
@@ -314,7 +316,7 @@ impl Interaction for Zoom {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         if let Some(canvas_hover_pos) = ctx.input.canvas_mouse_hover_pos {
-            let new_transform = memory.transform.resize_at(
+            let new_transform = memory.transform().resize_at(
                 ctx.input.mouse_zoom_delta.powf(options.zoom_factor),
                 canvas_hover_pos,
             );
@@ -325,7 +327,7 @@ impl Interaction for Zoom {
                 && range.end.x >= new_transform_scale.x
                 && range.end.y >= new_transform_scale.y
             {
-                memory.update_transform(new_transform);
+                memory.set_transform(new_transform);
             }
         }
         None
@@ -341,22 +343,20 @@ impl Interaction for AddPoint {
         options: &ShapeEditorOptions,
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
-        let Some(selected_point) = memory.selection.single_control_point() else {
+        let Some(selected_point) = memory.selection().single_control_point() else {
             return None;
         };
-        let Some(ShapeControlPoint::PathPoint { position, .. }) = memory
-            .shape_control_points
-            .by_index(selected_point)
-            .cloned()
+        let Some(ShapeControlPoint::PathPoint { position, .. }) =
+            ctx.shape_control_points.by_index(selected_point).cloned()
         else {
             return None;
         };
-        if let Some(shape_type) = memory
+        if let Some(shape_type) = ctx
             .shape_control_points
             .shape_type_by_control_point(selected_point)
         {
             let mouse_pos = memory
-                .snap
+                .snap()
                 .snap_point
                 .unwrap_or(ctx.input.canvas_content_mouse_pos);
             match shape_type {
@@ -372,14 +372,14 @@ impl Interaction for AddPoint {
                         shape,
                     );
                     memory
-                        .selection
+                        .selection_mut()
                         .select_single_control_point(new_point_index);
                 }
                 ShapeType::Rect => {}
                 ShapeType::Text => {}
                 ShapeType::Mesh => {}
                 ShapeType::QuadraticBezier => {
-                    let control_point = memory
+                    let control_point = ctx
                         .shape_control_points
                         .connected_bezier_control_point(selected_point);
                     memory.apply_boxed_action(
@@ -392,11 +392,13 @@ impl Interaction for AddPoint {
                         shape,
                     );
                     if let Some(last_index) = LastShapePointIndex::last_index(shape) {
-                        memory.selection.select_single_control_point(last_index);
+                        memory
+                            .selection_mut()
+                            .select_single_control_point(last_index);
                     }
                 }
                 ShapeType::CubicBezier => {
-                    let start_control_point = memory
+                    let start_control_point = ctx
                         .shape_control_points
                         .connected_bezier_control_point(selected_point);
                     memory.apply_boxed_action(
@@ -409,7 +411,9 @@ impl Interaction for AddPoint {
                         shape,
                     );
                     if let Some(last_index) = LastShapePointIndex::last_index(shape) {
-                        memory.selection.select_single_control_point(last_index);
+                        memory
+                            .selection_mut()
+                            .select_single_control_point(last_index);
                     }
                 }
                 ShapeType::Callback => {}
@@ -429,7 +433,9 @@ impl Interaction for DeletePoints {
         _ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         memory.apply_boxed_action(
-            Box::new(RemoveShapePoints(memory.selection.control_points().clone())),
+            Box::new(RemoveShapePoints(
+                memory.selection().control_points().clone(),
+            )),
             shape,
         );
         None
@@ -462,11 +468,11 @@ impl Interaction for ChangeSelectionOnPrimary {
         puffin_egui::puffin::profile_function!();
         if ctx.input.canvas_mouse_hover_pos.is_some()
             && ctx.input.mouse_primary_pressed
-            && memory.interaction.is_empty()
+            && memory.interaction().is_empty()
         {
             let next_selected =
                 memory
-                    .selection
+                    .selection()
                     .single_control_point()
                     .and_then(|single_selected_index| {
                         ctx.hovered_ui_shape_points
@@ -480,16 +486,16 @@ impl Interaction for ChangeSelectionOnPrimary {
                 || ctx.input.action_modifier.add_point_on_click()
                 || ctx.input.drag_started
                     && ctx.hovered_ui_shape_points.keys().any(|hovered_index| {
-                        memory.selection.is_control_point_selected(hovered_index)
+                        memory.selection().is_control_point_selected(hovered_index)
                     }))
             {
-                memory.selection.clear_selected_control_points();
+                memory.selection_mut().clear_selected_control_points();
             }
 
             if let Some(index_to_select) =
                 next_selected.or(ctx.hovered_ui_shape_points.keys().next().copied())
             {
-                memory.selection.select_control_point(index_to_select);
+                memory.selection_mut().select_control_point(index_to_select);
             }
         }
         None
@@ -497,17 +503,6 @@ impl Interaction for ChangeSelectionOnPrimary {
 }
 
 impl AddPointsThanShape {
-    pub fn new(
-        points_count: usize,
-        shape_fn: fn(&Vec<Pos2>, &ShapeEditorOptions) -> Option<Shape>,
-    ) -> Self {
-        Self {
-            points: Vec::default(),
-            points_count,
-            shape_fn,
-        }
-    }
-
     pub fn with_start_point(
         start_point: Pos2,
         points_count: usize,

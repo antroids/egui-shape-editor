@@ -154,15 +154,6 @@ impl ShapeControlPoints {
         self.control_points.get(index)
     }
 
-    pub fn by_shape_index(&self, shape_index: usize) -> HashSet<ShapePointIndex> {
-        puffin_egui::puffin::profile_function!();
-        self.control_points
-            .keys()
-            .filter(|index| index.shape_index == shape_index)
-            .copied()
-            .collect()
-    }
-
     pub fn pos_by_index(&self, index: &ShapePointIndex) -> Option<Pos2> {
         self.by_index(index).map(|p| p.position())
     }

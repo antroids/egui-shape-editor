@@ -481,12 +481,6 @@ impl<'a, R, T: IndexedShapesVisitor<R>> ShapeVisitor<R> for IndexedShapesVisitor
 
 pub struct GetShapeTypeByPointIndex(usize);
 
-impl GetShapeTypeByPointIndex {
-    pub fn shape_type(shape: &mut Shape, point_index: usize) -> Option<ShapeType> {
-        IndexedShapeControlPointsVisitorAdapter(&mut Self(point_index)).visit(shape)
-    }
-}
-
 impl IndexedShapeControlPointsVisitor<ShapeType> for GetShapeTypeByPointIndex {
     fn indexed_path_point(
         &mut self,

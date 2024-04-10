@@ -1,11 +1,12 @@
 use crate::shape_editor::{
-    grid, style, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorMemory, ShapeEditorOptions,
+    grid, index, style, Selection, ShapeEditor, ShapeEditorCanvasResponse, ShapeEditorOptions,
 };
 
 use super::transform::Transform;
 use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
-use crate::shape_editor::snap::paint_snap_point_highlight;
+use crate::shape_editor::memory::ShapeEditorMemory;
+use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
 use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::HashMap;
 use egui::{
@@ -104,6 +105,7 @@ pub(crate) struct CanvasInput {
     pub keyboard_action: Option<KeyboardAction>,
     pub mouse_scroll_delta: Vec2,
     pub mouse_zoom_delta: f32,
+    pub drag_delta: Vec2,
 }
 
 impl CanvasInput {
@@ -147,6 +149,7 @@ impl CanvasInput {
         });
         let drag_started = response.drag_started();
         let drag_released = response.drag_released();
+        let drag_delta = response.drag_delta();
 
         Self {
             mouse_hover_pos,
@@ -162,6 +165,7 @@ impl CanvasInput {
             keyboard_action: canvas_action,
             mouse_scroll_delta,
             mouse_zoom_delta,
+            drag_delta,
         }
     }
 
@@ -182,11 +186,12 @@ pub(crate) struct CanvasContext {
     pub(crate) hovered_ui_shape_points: HashMap<ShapePointIndex, ShapeControlPoint>,
     pub(crate) ui_shape: Shape,
     pub(crate) ui_shape_control_points: ShapeControlPoints,
+    pub(crate) shape_control_points: ShapeControlPoints,
 }
 
 impl CanvasContext {
     pub(crate) fn new(
-        shape: &Shape,
+        shape: &mut Shape,
         canvas_rect: Rect,
         options: &ShapeEditorOptions,
         memory: &mut ShapeEditorMemory,
@@ -194,25 +199,37 @@ impl CanvasContext {
         ui: &Ui,
         style: &dyn style::Style,
     ) -> Self {
-        let transform = CanvasTransform::new(canvas_rect, &memory.transform);
+        let transform = CanvasTransform::new(canvas_rect, &memory.transform());
         let input = CanvasInput::new(
             options,
             response,
             ui,
             &transform,
-            memory.last_mouse_hover_pos,
+            memory.last_mouse_hover_pos(),
         );
         let painter = ui.painter_at(canvas_rect);
-        let grid_index = memory
-            .grid
-            .get_or_insert_with(|| GridIndex::from_transform(&transform))
-            .clone();
+        let grid_index = GridIndex::from_transform(&transform);
         let mut ui_shape = transform.canvas_content_to_ui.transform_shape(shape);
         let ui_shape_control_points = ShapeControlPoints::collect(&mut ui_shape);
+        let shape_control_points = ShapeControlPoints::collect(shape);
         let hovered_ui_shape_points = input
             .mouse_hover_pos
             .map(|pos| ui_shape_control_points.points_in_radius(pos, style.control_point_radius()))
             .unwrap_or_default();
+        let selection = memory.selection().clone();
+        if options.snap_enabled_by_default != input.action_modifier.snap_mouse_cursor() {
+            SnapInfo::update_snap_info(
+                &mut memory.snap,
+                input.canvas_content_mouse_pos,
+                transform.ui_to_canvas_content.scale().x * options.snap_distance,
+                &grid_index,
+                &shape_control_points,
+                &selection,
+            );
+        } else {
+            memory.snap.clear();
+        }
+
         Self {
             transform,
             input,
@@ -221,7 +238,26 @@ impl CanvasContext {
             ui_shape,
             hovered_ui_shape_points,
             ui_shape_control_points,
+            shape_control_points,
         }
+    }
+
+    pub(crate) fn closest_selected_control_point(
+        &self,
+        selection: &Selection,
+    ) -> Option<&ShapeControlPoint> {
+        self.shape_control_points
+            .iter()
+            .filter_map(|(index, point)| {
+                selection.is_control_point_selected(index).then_some(point)
+            })
+            .min_by_key(|point| {
+                index::not_nan_f32(
+                    point
+                        .position()
+                        .distance(self.input.canvas_content_mouse_pos),
+                )
+            })
     }
 }
 
@@ -237,46 +273,27 @@ impl<'a> ShapeEditor<'a> {
         self.canvas_context_menu(response.clone(), memory, &ctx);
         paint_canvas_background(&ctx, self.style);
 
-        memory.shape_control_points = ShapeControlPoints::collect(self.shape);
-
         grid::paint_grid(&ctx, self.style);
         ctx.painter.add(ctx.ui_shape.clone());
 
-        update_snap_point(&ctx, memory, &self.options);
         memory.current_frame_interactions(&ctx);
         memory.update_interaction(self.shape, self.style, &self.options, &ctx);
 
         paint_shape_control_points(&ctx, memory, self.style);
-        paint_snap_point_highlight(&ctx, &memory.snap, self.style);
+        paint_snap_point_highlight(&ctx, &memory.snap(), self.style);
         paint_canvas_border(&ctx, self.style);
 
         memory.next_frame_interactions(&ctx);
 
         if !egui_ctx.is_context_menu_open() {
             if let Some(mouse_hover_pos) = ctx.input.mouse_hover_pos {
-                memory.last_mouse_hover_pos = mouse_hover_pos;
+                memory.set_last_mouse_hover_pos(mouse_hover_pos);
             }
             if let Some(canvas_mouse_hover_pos) = ctx.input.canvas_mouse_hover_pos {
-                memory.last_canvas_mouse_hover_pos = canvas_mouse_hover_pos;
+                memory.set_last_canvas_mouse_hover_pos(canvas_mouse_hover_pos);
             }
         }
         ShapeEditorCanvasResponse { response }
-    }
-}
-
-fn update_snap_point(
-    ctx: &CanvasContext,
-    memory: &mut ShapeEditorMemory,
-    options: &ShapeEditorOptions,
-) {
-    puffin_egui::puffin::profile_function!();
-    if options.snap_enabled_by_default != ctx.input.action_modifier.snap_mouse_cursor() {
-        memory.calculate_snap_point(
-            ctx.input.canvas_content_mouse_pos,
-            ctx.transform.ui_to_canvas_content.scale().x * options.snap_distance,
-        );
-    } else {
-        memory.clear_snap_point();
     }
 }
 
@@ -312,7 +329,7 @@ fn paint_shape_control_points(
         .sorted_by(|(k1, _), (k2, _)| k1.cmp(k2))
     {
         let hovered = ctx.hovered_ui_shape_points.contains_key(index);
-        let selected = memory.selection.is_control_point_selected(index);
+        let selected = memory.selection().is_control_point_selected(index);
         ctx.painter
             .add(ui_shape_point.to_shape(hovered, selected, style));
     }

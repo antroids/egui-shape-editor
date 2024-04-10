@@ -11,7 +11,6 @@ use egui_shape_editor::shape_editor::{
     ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::Into;
 use std::ops::{BitOrAssign, RangeInclusive};
 
 #[cfg(not(target_arch = "wasm32"))]

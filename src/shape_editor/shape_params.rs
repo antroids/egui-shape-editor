@@ -378,7 +378,7 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
 
     fn indexed_text(&mut self, index: usize, _text: &mut TextShape) -> Option<()> {
         if let Some(params) = self.shape_params.remove(&index) {
-            let mut changed = BTreeMap::default();
+            let changed = BTreeMap::default();
             for mut param in params {
                 match &mut param {
                     _ => continue,

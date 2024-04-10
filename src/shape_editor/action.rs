@@ -131,13 +131,6 @@ impl InsertShape {
         }
     }
 
-    pub fn replace_by_shape(index: usize, shape: Shape) -> Self {
-        Self {
-            shape: Some(shape),
-            replace: Some(index),
-        }
-    }
-
     pub fn cubic_bezier_from_two_points(
         start_point: Pos2,
         start_point_control: Option<Pos2>,
@@ -287,18 +280,6 @@ pub struct ReplaceShapes {
 impl ReplaceShapes {
     pub fn new(shapes_to_replace: HashMap<usize, Shape>) -> Self {
         Self { shapes_to_replace }
-    }
-
-    pub fn single(index: usize, shape: Shape) -> Self {
-        Self {
-            shapes_to_replace: HashMap::from_iter([(index, shape)]),
-        }
-    }
-
-    pub fn replace_by_noop<'a>(values: impl Iterator<Item = &'a usize>) -> Self {
-        Self {
-            shapes_to_replace: values.map(|index| (*index, Shape::Noop)).collect(),
-        }
     }
 }
 

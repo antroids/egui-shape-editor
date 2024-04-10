@@ -1,5 +1,6 @@
 use crate::shape_editor::canvas::CanvasContext;
-use crate::shape_editor::{interaction, utils, ShapeEditor, ShapeEditorMemory};
+use crate::shape_editor::memory::ShapeEditorMemory;
+use crate::shape_editor::{interaction, utils, ShapeEditor};
 use egui::epaint::{CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
 use egui::{Color32, Mesh, Pos2, Rect, Response, Shape};
 
@@ -155,7 +156,7 @@ impl<'a> ShapeEditor<'a> {
             });
 
             if let Some(last_action_name) = memory
-                .action_history
+                .action_history()
                 .last()
                 .map(|(_, short_name)| short_name)
             {

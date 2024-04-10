@@ -1,7 +1,7 @@
 use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::control_point::ShapeControlPoints;
-use crate::shape_editor::index::{GridLineType, SnapComponent};
-use crate::shape_editor::{style, ShapeEditorMemory};
+use crate::shape_editor::index::{GridIndex, GridLineType, SnapComponent};
+use crate::shape_editor::{style, Selection};
 use egui::ahash::{HashSet, HashSetExt};
 use egui::{Pos2, Rect, Shape, Vec2};
 use std::cmp::Ordering;
@@ -22,94 +22,110 @@ pub struct SnapInfo {
     pub snap_point: Option<Pos2>,
 }
 
-impl SnapInfo {}
-
-impl ShapeEditorMemory {
-    fn calculate_snap_point_x(
-        &mut self,
+impl SnapInfo {
+    pub(crate) fn update_snap_info(
+        snap: &mut SnapInfo,
         pos: Pos2,
         max_distance: f32,
-        ignored_grid_line_types: &HashSet<GridLineType>,
-    ) -> Option<f32> {
-        let control_point_snap =
-            self.shape_control_points
-                .snap_x(pos, max_distance, &self.selection.control_points());
-        let grid_snap = self
-            .grid
-            .as_ref()
-            .map(|grid| grid.snap_x(pos, max_distance, ignored_grid_line_types))
-            .unwrap_or_default();
-        calculate_snap_point_component(
-            &mut self.snap,
-            pos.x,
-            &self.shape_control_points,
-            control_point_snap,
-            grid_snap,
-            SnapTarget::GridHorizontal,
-        )
-    }
-
-    fn calculate_snap_point_y(
-        &mut self,
-        pos: Pos2,
-        max_distance: f32,
-        ignored_grid_line_types: &HashSet<GridLineType>,
-    ) -> Option<f32> {
-        let control_point_snap =
-            self.shape_control_points
-                .snap_y(pos, max_distance, &self.selection.control_points());
-        let grid_snap = self
-            .grid
-            .as_ref()
-            .map(|grid| grid.snap_y(pos, max_distance, ignored_grid_line_types))
-            .unwrap_or_default();
-        calculate_snap_point_component(
-            &mut self.snap,
-            pos.y,
-            &self.shape_control_points,
-            control_point_snap,
-            grid_snap,
-            SnapTarget::GridVertical,
-        )
-    }
-
-    pub(crate) fn calculate_snap_point(&mut self, pos: Pos2, max_distance: f32) {
+        grid_index: &GridIndex,
+        shape_control_points: &ShapeControlPoints,
+        selection: &Selection,
+    ) {
         let mut ignored_grid_line_types = HashSet::with_capacity(1);
         ignored_grid_line_types.insert(GridLineType::Sub);
-        let max_distance_x = if self.snap.manual_snap_x.is_some() {
+        let max_distance_x = if snap.manual_snap_x.is_some() {
             0.0
         } else {
             max_distance
         };
-        let max_distance_y = if self.snap.manual_snap_y.is_some() {
+        let max_distance_y = if snap.manual_snap_y.is_some() {
             0.0
         } else {
             max_distance
         };
-        self.snap.targets.clear();
-        let snap_x = self.calculate_snap_point_x(pos, max_distance_x, &ignored_grid_line_types);
-        let snap_y = self.calculate_snap_point_y(pos, max_distance_y, &ignored_grid_line_types);
+        snap.targets.clear();
+        let snap_x = calculate_snap_point_x(
+            snap,
+            pos,
+            max_distance_x,
+            grid_index,
+            shape_control_points,
+            selection,
+            &ignored_grid_line_types,
+        );
+        let snap_y = calculate_snap_point_y(
+            snap,
+            pos,
+            max_distance_y,
+            grid_index,
+            shape_control_points,
+            selection,
+            &ignored_grid_line_types,
+        );
 
         if snap_x.is_some()
             || snap_y.is_some()
-            || self.snap.manual_snap_x.is_some()
-            || self.snap.manual_snap_y.is_some()
+            || snap.manual_snap_x.is_some()
+            || snap.manual_snap_y.is_some()
         {
-            self.snap.snap_point.replace(Pos2::new(
-                snap_x.or(self.snap.manual_snap_x).unwrap_or(pos.x),
-                snap_y.or(self.snap.manual_snap_y).unwrap_or(pos.y),
+            snap.snap_point.replace(Pos2::new(
+                snap_x.or(snap.manual_snap_x).unwrap_or(pos.x),
+                snap_y.or(snap.manual_snap_y).unwrap_or(pos.y),
             ));
         } else {
-            self.snap.snap_point = None;
+            snap.snap_point = None;
         }
     }
-
-    pub(crate) fn clear_snap_point(&mut self) {
-        self.snap.targets.clear();
-        self.snap.manual_snap_x.take();
-        self.snap.manual_snap_y.take();
-        self.snap.snap_point.take();
+    pub(crate) fn clear(&mut self) {
+        self.targets.clear();
+        self.manual_snap_x.take();
+        self.manual_snap_y.take();
+        self.snap_point.take();
     }
+}
+
+fn calculate_snap_point_x(
+    snap: &mut SnapInfo,
+    pos: Pos2,
+    max_distance: f32,
+    grid_index: &GridIndex,
+    shape_control_points: &ShapeControlPoints,
+    selection: &Selection,
+    ignored_grid_line_types: &HashSet<GridLineType>,
+) -> Option<f32> {
+    let control_point_snap =
+        shape_control_points.snap_x(pos, max_distance, selection.control_points());
+    let grid_snap = grid_index.snap_x(pos, max_distance, ignored_grid_line_types);
+    calculate_snap_point_component(
+        snap,
+        pos.x,
+        shape_control_points,
+        control_point_snap,
+        grid_snap,
+        SnapTarget::GridHorizontal,
+    )
+}
+
+fn calculate_snap_point_y(
+    snap: &mut SnapInfo,
+    pos: Pos2,
+    max_distance: f32,
+    grid_index: &GridIndex,
+    shape_control_points: &ShapeControlPoints,
+    selection: &Selection,
+    ignored_grid_line_types: &HashSet<GridLineType>,
+) -> Option<f32> {
+    let control_point_snap =
+        shape_control_points.snap_y(pos, max_distance, selection.control_points());
+    let grid_snap = grid_index.snap_y(pos, max_distance, ignored_grid_line_types);
+    calculate_snap_point_component(
+        snap,
+        pos.y,
+        shape_control_points,
+        control_point_snap,
+        grid_snap,
+        SnapTarget::GridVertical,
+    )
 }
 
 fn calculate_snap_point_component<F: FnOnce(f32) -> SnapTarget>(

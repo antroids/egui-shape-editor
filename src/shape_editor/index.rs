@@ -73,10 +73,6 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
             self.0.insert(key, HashSet::from_iter([value]));
         }
     }
-
-    pub fn clear(&mut self) {
-        self.0.clear();
-    }
 }
 
 #[derive(Clone, Default, Debug)]

@@ -1,15 +1,10 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
-use crate::shape_editor::index::GridIndex;
-use crate::shape_editor::interaction::Interaction;
 use crate::shape_editor::shape_params::ApplyShapeParams;
-use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::visitor::ShapePointIndex;
-use control_point::{ShapeControlPoint, ShapeControlPoints};
 use egui::ahash::{HashMap, HashSet};
-use egui::{
-    Color32, Context, Id, KeyboardShortcut, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2,
-};
+use egui::{Color32, Context, Id, KeyboardShortcut, Response, Sense, Shape, Stroke, Ui, Vec2};
+use memory::ShapeEditorMemory;
 use std::collections::BTreeMap;
 use std::ops::Range;
 use transform::Transform;
@@ -23,6 +18,7 @@ mod control_point;
 mod grid;
 mod index;
 mod interaction;
+mod memory;
 mod rulers;
 mod shape_params;
 mod snap;
@@ -61,13 +57,6 @@ impl Default for ShapeEditorOptions {
             keyboard_shortcuts: Default::default(),
         }
     }
-}
-
-#[derive(Clone)]
-enum MouseDrag {
-    MoveShapeControlPoints(Pos2, Pos2),
-    Selection(Rect),
-    Scroll(Pos2),
 }
 
 #[derive(Clone, Default)]
@@ -120,76 +109,6 @@ impl Selection {
         control_points.iter().for_each(|index| {
             self.control_points.remove(index);
         });
-    }
-}
-
-#[derive(Clone)]
-pub struct ShapeEditorMemory {
-    transform: Transform,
-    shape_control_points: ShapeControlPoints,
-    grid: Option<GridIndex>,
-    interaction: Vec<Box<dyn Interaction>>,
-    action_history: Vec<(Box<dyn ShapeAction>, String)>,
-    last_mouse_hover_pos: Pos2,
-    last_canvas_mouse_hover_pos: Pos2,
-    selection: Selection,
-    snap: SnapInfo,
-}
-
-impl Default for ShapeEditorMemory {
-    fn default() -> Self {
-        Self {
-            transform: Default::default(),
-            shape_control_points: Default::default(),
-            grid: None,
-            interaction: Vec::new(),
-            action_history: Vec::new(),
-            last_mouse_hover_pos: Pos2::ZERO,
-            last_canvas_mouse_hover_pos: Pos2::ZERO,
-            selection: Default::default(),
-            snap: Default::default(),
-        }
-    }
-}
-
-impl ShapeEditorMemory {
-    fn load(ctx: &Context, id: Id) -> Self {
-        ctx.data(|data| data.get_temp(id)).unwrap_or_default()
-    }
-
-    fn store(self, ctx: &Context, id: Id) {
-        ctx.data_mut(|data| data.insert_temp(id, self))
-    }
-
-    fn apply_boxed_action(&mut self, action: Box<dyn ShapeAction>, shape: &mut Shape) {
-        let short_name = action.short_name();
-        self.push_action_history(action.apply(shape), short_name)
-    }
-
-    fn push_action_history(&mut self, action: Box<dyn ShapeAction>, short_name: String) {
-        self.action_history.push((action, short_name))
-    }
-
-    fn undo(&mut self, shape: &mut Shape) {
-        if let Some((action, _)) = self.action_history.pop() {
-            action.apply(shape);
-        }
-    }
-
-    fn closest_selected_control_point(&self, pos: Pos2) -> Option<&ShapeControlPoint> {
-        self.shape_control_points
-            .iter()
-            .filter_map(|(index, point)| {
-                self.selection
-                    .is_control_point_selected(index)
-                    .then_some(point)
-            })
-            .min_by_key(|point| index::not_nan_f32(point.position().distance(pos)))
-    }
-
-    fn update_transform(&mut self, transform: Transform) {
-        self.transform = transform;
-        self.grid.take();
     }
 }
 
@@ -249,16 +168,16 @@ impl<'a> ShapeEditor<'a> {
     pub fn undo(&mut self, ctx: &Context) -> usize {
         memory_mut(self.id, ctx, |mem| {
             mem.undo(self.shape);
-            mem.action_history.len()
+            mem.action_history().len()
         })
     }
 
     pub fn scale(&self, ctx: &Context) -> Transform {
-        memory_mut(self.id, ctx, |mem| mem.transform.clone())
+        memory_mut(self.id, ctx, |mem| mem.transform().clone())
     }
 
     pub fn set_scale(&self, ctx: &Context, transform: Transform) {
-        memory_mut(self.id, ctx, |mem| mem.update_transform(transform));
+        memory_mut(self.id, ctx, |mem| mem.set_transform(transform));
     }
 
     pub fn options_mut(&mut self) -> &mut ShapeEditorOptions {
@@ -266,7 +185,7 @@ impl<'a> ShapeEditor<'a> {
     }
 
     pub fn selection(&self, ctx: &Context) -> Selection {
-        memory_mut(self.id, ctx, |mem| mem.selection.clone())
+        memory_mut(self.id, ctx, |mem| mem.selection().clone())
     }
 
     pub fn selection_shapes_params(&mut self, ctx: &Context) -> ShapesParams {
@@ -286,7 +205,7 @@ impl<'a> ShapeEditor<'a> {
     ) {
         memory_mut(self.id, ctx, |mem| {
             self.apply_action(
-                ApplyShapeParams::from_common(params, mem.selection.shapes()),
+                ApplyShapeParams::from_common(params, mem.selection().shapes()),
                 mem,
             )
         })
