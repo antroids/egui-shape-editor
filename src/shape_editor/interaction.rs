@@ -8,7 +8,8 @@ use crate::shape_editor::style::Style;
 use crate::shape_editor::visitor::{LastShapePointIndex, ShapeType};
 use crate::shape_editor::{action, utils, ShapeEditorOptions};
 use dyn_clone::DynClone;
-use egui::{Pos2, Rect, Shape, Vec2};
+use egui::epaint::{CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
+use egui::{Color32, Mesh, Pos2, Rect, Shape, Vec2};
 use std::fmt::Debug;
 use std::mem;
 use std::ops::Mul;
@@ -512,6 +513,99 @@ impl AddPointsThanShape {
             points: vec![start_point],
             points_count,
             shape_fn,
+        }
+    }
+
+    pub fn with_shape_type_and_start_point(shape_type: ShapeType, point: Pos2) -> Self {
+        match shape_type {
+            ShapeType::Circle => Self::with_start_point(point, 2, |points, options| {
+                if let &[p0, p1, ..] = points.as_slice() {
+                    Some(Shape::circle_stroke(p0, p0.distance(p1), options.stroke))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::LineSegment => Self::with_start_point(point, 2, |points, options| {
+                if let &[p0, p1, ..] = points.as_slice() {
+                    Some(Shape::line_segment([p0, p1], options.stroke))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::Path => Self::with_start_point(point, 2, |points, options| {
+                if let &[p0, p1, ..] = points.as_slice() {
+                    Some(Shape::Path(PathShape::line(vec![p0, p1], options.stroke)))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::Rect => Self::with_start_point(point, 2, |points, options| {
+                if let &[p0, p1, ..] = points.as_slice() {
+                    let rect = utils::normalize_rect(&Rect::from_two_pos(p0, p1));
+                    Some(Shape::rect_stroke(rect, 0.0, options.stroke))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::Text => {
+                todo!()
+            }
+            ShapeType::Mesh => Self::with_start_point(point, 3, |points, options| {
+                if let &[p0, p1, p2, ..] = points.as_slice() {
+                    Some(Shape::mesh(Mesh {
+                        indices: vec![0, 1, 2],
+                        vertices: vec![
+                            Vertex {
+                                pos: p0,
+                                uv: Pos2::ZERO,
+                                color: options.stroke.color,
+                            },
+                            Vertex {
+                                pos: p1,
+                                uv: Pos2::ZERO,
+                                color: options.stroke.color,
+                            },
+                            Vertex {
+                                pos: p2,
+                                uv: Pos2::ZERO,
+                                color: options.stroke.color,
+                            },
+                        ],
+                        texture_id: Default::default(),
+                    }))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::QuadraticBezier => Self::with_start_point(point, 3, |points, options| {
+                if let &[p0, p1, p2, ..] = points.as_slice() {
+                    Some(Shape::QuadraticBezier(
+                        QuadraticBezierShape::from_points_stroke(
+                            [p0, p1, p2],
+                            false,
+                            Color32::TRANSPARENT,
+                            options.stroke,
+                        ),
+                    ))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::CubicBezier => Self::with_start_point(point, 4, |points, options| {
+                if let &[p0, p1, p2, p3, ..] = points.as_slice() {
+                    Some(Shape::CubicBezier(CubicBezierShape::from_points_stroke(
+                        [p0, p1, p2, p3],
+                        false,
+                        Color32::TRANSPARENT,
+                        options.stroke,
+                    )))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::Callback => {
+                todo!()
+            }
         }
     }
 }

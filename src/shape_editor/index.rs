@@ -169,11 +169,6 @@ impl ShapeControlPointsIndex {
             .map(|(y, index)| (y.into_inner(), index));
         y
     }
-
-    pub fn clear(&mut self) {
-        self.x_index.clear();
-        self.y_index.clear();
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]

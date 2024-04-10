@@ -1,7 +1,7 @@
 use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
 use crate::shape_editor::shape_params::ApplyShapeParams;
-use crate::shape_editor::visitor::ShapePointIndex;
+use crate::shape_editor::visitor::{ShapePointIndex, ShapeType};
 use egui::ahash::{HashMap, HashSet};
 use egui::{Color32, Context, Id, KeyboardShortcut, Response, Sense, Shape, Stroke, Ui, Vec2};
 use memory::ShapeEditorMemory;
@@ -43,10 +43,20 @@ pub struct ShapeEditorOptions {
     pub snap_distance: f32,
     pub snap_enabled_by_default: bool,
     pub keyboard_shortcuts: HashMap<KeyboardAction, KeyboardShortcut>,
+    pub context_menu_add_shapes: Vec<ShapeType>,
 }
 
 impl Default for ShapeEditorOptions {
     fn default() -> Self {
+        let context_menu_add_shapes = vec![
+            ShapeType::Path,
+            ShapeType::LineSegment,
+            ShapeType::Circle,
+            ShapeType::Rect,
+            ShapeType::QuadraticBezier,
+            ShapeType::CubicBezier,
+            ShapeType::Mesh,
+        ];
         Self {
             scroll_factor: Vec2::new(0.1, 0.1),
             zoom_factor: 0.2,
@@ -55,6 +65,7 @@ impl Default for ShapeEditorOptions {
             snap_distance: 5.0,
             snap_enabled_by_default: true,
             keyboard_shortcuts: Default::default(),
+            context_menu_add_shapes,
         }
     }
 }

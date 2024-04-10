@@ -74,7 +74,7 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, strum::Display)]
 pub enum ShapeType {
     Circle,
     LineSegment,
