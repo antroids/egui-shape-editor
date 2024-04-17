@@ -1,5 +1,5 @@
-use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
+use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::shape_params::ApplyShapeParams;
 use crate::shape_editor::visitor::{ShapePointIndex, ShapeType};
 use egui::ahash::{HashMap, HashSet};
@@ -11,7 +11,6 @@ use transform::Transform;
 
 pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams};
 
-mod action;
 mod canvas;
 mod canvas_context_menu;
 mod control_point;
@@ -20,6 +19,7 @@ mod index;
 mod interaction;
 mod memory;
 mod rulers;
+mod shape_action;
 mod shape_params;
 mod snap;
 pub mod style;

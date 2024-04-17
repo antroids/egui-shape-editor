@@ -1,5 +1,5 @@
-use crate::shape_editor::action::ShapeAction;
 use crate::shape_editor::interaction::Interaction;
+use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::snap::SnapInfo;
 use crate::shape_editor::transform::Transform;
 use crate::shape_editor::Selection;

@@ -1,4 +1,4 @@
-use crate::shape_editor::action::ShapeAction;
+use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapeVisitor,
 };
