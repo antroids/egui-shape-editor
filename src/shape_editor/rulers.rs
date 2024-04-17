@@ -37,7 +37,7 @@ pub(crate) fn paint_rulers(
                             .add(style.rulers_text_position().to_vec2()),
                         painter.fonts(|fonts| {
                             fonts.layout_no_wrap(
-                                format!("{}", x),
+                                x.to_string(),
                                 style.rulers_font().clone(),
                                 style.rulers_font_color(),
                             )
@@ -94,7 +94,7 @@ pub(crate) fn paint_rulers(
                         )),
                         painter.fonts(|fonts| {
                             fonts.layout_no_wrap(
-                                format!("{}", y),
+                                y.to_string(),
                                 style.rulers_font().clone(),
                                 style.rulers_font_color(),
                             )

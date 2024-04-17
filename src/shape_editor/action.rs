@@ -179,58 +179,6 @@ impl InsertShape {
             .into(),
         )
     }
-
-    pub fn circle_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
-        Shape::Circle(CircleShape::stroke(
-            end_point,
-            start_point.distance(end_point),
-            stroke,
-        ))
-        .into()
-    }
-
-    pub fn line_segment_from_two_points(
-        start_point: Pos2,
-        end_point: Pos2,
-        stroke: Stroke,
-    ) -> Self {
-        Shape::line_segment([start_point, end_point], stroke).into()
-    }
-
-    pub fn path_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
-        Shape::Path(PathShape::line(vec![start_point, end_point], stroke)).into()
-    }
-
-    pub fn rect_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
-        Shape::rect_stroke(Rect::from_two_pos(start_point, end_point), 0.0, stroke).into()
-    }
-
-    pub fn mesh_from_two_points(start_point: Pos2, end_point: Pos2, stroke: Stroke) -> Self {
-        let mut mesh = Mesh::default();
-        let third_point = start_point + (start_point - end_point).rot90();
-        let first_vertex_index = mesh.vertices.len() as u32;
-        mesh.vertices.push(Vertex {
-            pos: start_point,
-            uv: Pos2::ZERO,
-            color: stroke.color,
-        });
-        mesh.vertices.push(Vertex {
-            pos: end_point,
-            uv: Pos2::ZERO,
-            color: stroke.color,
-        });
-        mesh.vertices.push(Vertex {
-            pos: third_point,
-            uv: Pos2::ZERO,
-            color: stroke.color,
-        });
-        mesh.add_triangle(
-            first_vertex_index,
-            first_vertex_index + 1,
-            first_vertex_index + 2,
-        );
-        Shape::mesh(mesh).into()
-    }
 }
 
 impl From<Shape> for InsertShape {

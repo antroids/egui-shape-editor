@@ -362,7 +362,20 @@ impl Interaction for AddPoint {
                 .unwrap_or(ctx.input.canvas_content_mouse_pos);
             match shape_type {
                 ShapeType::Circle => {}
-                ShapeType::LineSegment => {}
+                ShapeType::LineSegment => {
+                    memory.apply_boxed_action(
+                        Box::new(InsertShape::from_shape(Shape::LineSegment {
+                            points: [position, mouse_pos],
+                            stroke: options.stroke,
+                        })),
+                        shape,
+                    );
+                    if let Some(last_index) = LastShapePointIndex::last_index(shape) {
+                        memory
+                            .selection_mut()
+                            .select_single_control_point(last_index);
+                    }
+                }
                 ShapeType::Path => {
                     let new_point_index = selected_point.next_point();
                     memory.apply_boxed_action(
