@@ -41,7 +41,8 @@ impl ShapeEditorMemory {
 
     pub(crate) fn apply_boxed_action(&mut self, action: Box<dyn ShapeAction>, shape: &mut Shape) {
         let short_name = action.short_name();
-        self.push_action_history(action.apply(shape), short_name)
+        let undo_action = action.apply_with_selection(shape, &mut self.selection);
+        self.push_action_history(undo_action, short_name)
     }
 
     pub(crate) fn push_action_history(&mut self, action: Box<dyn ShapeAction>, short_name: String) {
@@ -50,7 +51,7 @@ impl ShapeEditorMemory {
 
     pub(crate) fn undo(&mut self, shape: &mut Shape) {
         if let Some((action, _)) = self.action_history.pop() {
-            action.apply(shape);
+            action.apply_with_selection(shape, &mut self.selection);
         }
     }
 

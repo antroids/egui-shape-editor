@@ -1,12 +1,13 @@
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
 use crate::shape_editor::control_point::ShapeControlPoint;
 use crate::shape_editor::memory::ShapeEditorMemory;
-use crate::shape_editor::shape_action::{
-    AddShapePoints, InsertShape, RemoveShapePoints, ShapeAction, ShapePoint,
-};
+use crate::shape_editor::shape_action::add_shape_points::AddShapePoints;
+use crate::shape_editor::shape_action::insert_shape::InsertShape;
+use crate::shape_editor::shape_action::remove_shape_points::RemoveShapePoints;
+use crate::shape_editor::shape_action::{move_shape_points, ShapeAction, ShapePoint};
 use crate::shape_editor::style::Style;
 use crate::shape_editor::visitor::{LastShapePointIndex, ShapeType};
-use crate::shape_editor::{shape_action, utils, ShapeEditorOptions};
+use crate::shape_editor::{utils, ShapeEditorOptions};
 use dyn_clone::DynClone;
 use egui::epaint::{CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
 use egui::{Color32, Mesh, Pos2, Rect, Shape, Vec2};
@@ -151,7 +152,7 @@ impl Interaction for MoveShapeControlPoints {
         puffin_egui::puffin::profile_function!();
         if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
             if self.end_pos != self.start_pos && memory.selection().has_control_points() {
-                let move_action = shape_action::MoveShapeControlPoints::from_index_and_translation(
+                let move_action = move_shape_points::MoveShapePoints::from_index_and_translation(
                     memory.selection().control_points(),
                     &(self.end_pos - self.start_pos),
                 );
@@ -169,7 +170,7 @@ impl Interaction for MoveShapeControlPoints {
                     .snap_point
                     .unwrap_or(ctx.input.canvas_content_mouse_pos);
                 Box::new(
-                    shape_action::MoveShapeControlPoints::from_index_and_translation(
+                    move_shape_points::MoveShapePoints::from_index_and_translation(
                         memory.selection().control_points(),
                         &(snap_point - self.end_pos),
                     ),

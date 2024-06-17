@@ -4,9 +4,10 @@ use crate::shape_editor::visitor::{
     IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter, ShapePointIndex,
     ShapeType, ShapeVisitor,
 };
-use egui::ahash::{HashMap, HashSet};
+use egui::ahash::HashMap;
 use egui::{Color32, Pos2, Rect, Shape, Stroke};
 use std::collections::hash_map::Iter;
+use std::collections::BTreeSet;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ShapeControlPoint {
@@ -97,7 +98,7 @@ impl ShapeControlPoints {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<ShapePointIndex>,
+        ignore: &BTreeSet<ShapePointIndex>,
     ) -> Option<SnapComponent> {
         self.index.snap_x(pos, max_distance, ignore)
     }
@@ -106,7 +107,7 @@ impl ShapeControlPoints {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<ShapePointIndex>,
+        ignore: &BTreeSet<ShapePointIndex>,
     ) -> Option<SnapComponent> {
         self.index.snap_y(pos, max_distance, ignore)
     }

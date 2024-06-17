@@ -1,25 +1,25 @@
 use crate::shape_editor::canvas::CanvasTransform;
 use crate::shape_editor::utils;
 use crate::shape_editor::visitor::ShapePointIndex;
-use egui::ahash::{HashMap, HashSet};
+use egui::ahash::HashMap;
 use egui::{Pos2, Rect};
 use num_traits::{Bounded, Zero};
 use ordered_float::{FloatCore, NotNan};
-use std::collections::btree_map;
 use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeSet};
 use std::hash::Hash;
 use std::ops::{RangeBounds, Sub};
 
-pub type SnapComponent = (f32, HashSet<ShapePointIndex>);
+pub type SnapComponent = (f32, BTreeSet<ShapePointIndex>);
 
 #[derive(Clone, Default, Debug)]
-pub struct FloatIndex<K: FloatCore, V>(pub BTreeMap<NotNan<K>, HashSet<V>>);
+pub struct FloatIndex<K: FloatCore, V>(pub BTreeMap<NotNan<K>, BTreeSet<V>>);
 
-impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
+impl<K: FloatCore, V: Eq + Hash + Copy + Ord> FloatIndex<K, V> {
     pub fn find_in_range<R: RangeBounds<NotNan<K>>>(
         &self,
         range: R,
-    ) -> btree_map::Range<NotNan<K>, HashSet<V>> {
+    ) -> btree_map::Range<NotNan<K>, BTreeSet<V>> {
         self.0.range(range)
     }
 
@@ -27,7 +27,7 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
         &self,
         key: NotNan<K>,
         max_distance: NotNan<K>,
-    ) -> btree_map::Range<NotNan<K>, HashSet<V>> {
+    ) -> btree_map::Range<NotNan<K>, BTreeSet<V>> {
         let d = max_distance.abs();
         self.find_in_range(key - d..=key + d)
     }
@@ -36,8 +36,8 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
         &self,
         key: NotNan<K>,
         max_distance: NotNan<K>,
-        ignore_values: &HashSet<V>,
-    ) -> Option<(NotNan<K>, HashSet<V>)> {
+        ignore_values: &BTreeSet<V>,
+    ) -> Option<(NotNan<K>, BTreeSet<V>)> {
         if max_distance != NotNan::zero() {
             let d = max_distance.abs();
             [
@@ -70,7 +70,7 @@ impl<K: FloatCore, V: Eq + Hash + Copy> FloatIndex<K, V> {
         if let Some(set) = self.0.get_mut(&key) {
             set.insert(value);
         } else {
-            self.0.insert(key, HashSet::from_iter([value]));
+            self.0.insert(key, BTreeSet::from_iter([value]));
         }
     }
 }
@@ -140,7 +140,7 @@ impl ShapeControlPointsIndex {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<ShapePointIndex>,
+        ignore: &BTreeSet<ShapePointIndex>,
     ) -> Option<SnapComponent> {
         let x = self
             .x_index
@@ -157,7 +157,7 @@ impl ShapeControlPointsIndex {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<ShapePointIndex>,
+        ignore: &BTreeSet<ShapePointIndex>,
     ) -> Option<SnapComponent> {
         let y = self
             .y_index
@@ -171,7 +171,7 @@ impl ShapeControlPointsIndex {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug, PartialOrd, Ord)]
 pub enum GridLineType {
     #[default]
     Zero,
@@ -232,7 +232,7 @@ impl GridIndex {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<GridLineType>,
+        ignore: &BTreeSet<GridLineType>,
     ) -> Option<f32> {
         let x = self
             .horizontal
@@ -249,7 +249,7 @@ impl GridIndex {
         &self,
         pos: Pos2,
         max_distance: f32,
-        ignore: &HashSet<GridLineType>,
+        ignore: &BTreeSet<GridLineType>,
     ) -> Option<f32> {
         let y = self
             .vertical

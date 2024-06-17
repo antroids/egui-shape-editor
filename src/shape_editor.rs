@@ -5,7 +5,7 @@ use crate::shape_editor::visitor::{ShapePointIndex, ShapeType};
 use egui::ahash::{HashMap, HashSet};
 use egui::{Color32, Context, Id, KeyboardShortcut, Response, Sense, Shape, Stroke, Ui, Vec2};
 use memory::ShapeEditorMemory;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use transform::Transform;
 
@@ -72,7 +72,7 @@ impl Default for ShapeEditorOptions {
 
 #[derive(Clone, Default)]
 pub struct Selection {
-    control_points: HashSet<ShapePointIndex>,
+    control_points: BTreeSet<ShapePointIndex>,
 }
 
 impl Selection {
@@ -105,8 +105,12 @@ impl Selection {
         }
     }
 
-    pub fn control_points(&self) -> &HashSet<ShapePointIndex> {
+    pub fn control_points(&self) -> &BTreeSet<ShapePointIndex> {
         &self.control_points
+    }
+
+    pub(crate) fn control_points_mut(&mut self) -> &mut BTreeSet<ShapePointIndex> {
+        &mut self.control_points
     }
 
     pub fn shapes(&self) -> HashSet<usize> {

@@ -2,9 +2,9 @@ use crate::shape_editor::canvas::CanvasContext;
 use crate::shape_editor::control_point::ShapeControlPoints;
 use crate::shape_editor::index::{GridIndex, GridLineType, SnapComponent};
 use crate::shape_editor::{style, Selection};
-use egui::ahash::{HashSet, HashSetExt};
 use egui::{Pos2, Rect, Shape, Vec2};
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::ops::Sub;
 
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ impl SnapInfo {
         shape_control_points: &ShapeControlPoints,
         selection: &Selection,
     ) {
-        let mut ignored_grid_line_types = HashSet::with_capacity(1);
+        let mut ignored_grid_line_types = BTreeSet::new();
         ignored_grid_line_types.insert(GridLineType::Sub);
         let max_distance_x = if snap.manual_snap_x.is_some() {
             0.0
@@ -91,7 +91,7 @@ fn calculate_snap_point_x(
     grid_index: &GridIndex,
     shape_control_points: &ShapeControlPoints,
     selection: &Selection,
-    ignored_grid_line_types: &HashSet<GridLineType>,
+    ignored_grid_line_types: &BTreeSet<GridLineType>,
 ) -> Option<f32> {
     let control_point_snap =
         shape_control_points.snap_x(pos, max_distance, selection.control_points());
@@ -113,7 +113,7 @@ fn calculate_snap_point_y(
     grid_index: &GridIndex,
     shape_control_points: &ShapeControlPoints,
     selection: &Selection,
-    ignored_grid_line_types: &HashSet<GridLineType>,
+    ignored_grid_line_types: &BTreeSet<GridLineType>,
 ) -> Option<f32> {
     let control_point_snap =
         shape_control_points.snap_y(pos, max_distance, selection.control_points());
