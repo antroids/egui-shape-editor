@@ -52,6 +52,7 @@ impl Default for ShapeEditorOptions {
             ShapeType::Path,
             ShapeType::LineSegment,
             ShapeType::Circle,
+            ShapeType::Ellipse,
             ShapeType::Rect,
             ShapeType::QuadraticBezier,
             ShapeType::CubicBezier,
@@ -142,7 +143,7 @@ impl<'a> ShapeEditor<'a> {
         let mut memory = ShapeEditorMemory::load(egui_ctx, self.id);
         let margins = self.style.rulers_margins();
         let canvas_rect = margins.shrink_rect(outer_rect);
-        let response = ui.allocate_rect(canvas_rect, Sense::drag());
+        let response = ui.allocate_rect(canvas_rect, Sense::click_and_drag());
         let ctx = CanvasContext::new(
             self.shape,
             canvas_rect,

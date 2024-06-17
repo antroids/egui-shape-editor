@@ -2,8 +2,8 @@ use crate::shape_editor::utils::normalize_rect;
 use egui::ahash::HashMap;
 use egui::emath::Pos2;
 use egui::epaint::{
-    CircleShape, CubicBezierShape, Mesh, PaintCallback, PathShape, QuadraticBezierShape, RectShape,
-    Shape, Stroke, TextShape,
+    CircleShape, CubicBezierShape, EllipseShape, Mesh, PaintCallback, PathShape,
+    QuadraticBezierShape, RectShape, Shape, Stroke, TextShape,
 };
 use egui::Vec2;
 use std::ops::{Add, AddAssign, SubAssign};
@@ -21,6 +21,9 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
         None
     }
     fn circle(&mut self, _index: &mut I, _circle: &mut CircleShape) -> Option<R> {
+        None
+    }
+    fn ellipse(&mut self, _index: &mut I, _ellipse: &mut EllipseShape) -> Option<R> {
         None
     }
     fn rect(&mut self, _index: &mut I, _rect: &mut RectShape) -> Option<R> {
@@ -62,6 +65,7 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
             Shape::QuadraticBezier(qb) => self.quadratic_bezier(index, qb),
             Shape::CubicBezier(cb) => self.cubic_bezier(index, cb),
             Shape::Callback(callback) => self.paint_callback(index, callback),
+            Shape::Ellipse(ellipse) => self.ellipse(index, ellipse),
         }
     }
 
@@ -77,6 +81,7 @@ pub trait ShapeVisitor<R = (), I: Default = usize> {
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display)]
 pub enum ShapeType {
     Circle,
+    Ellipse,
     LineSegment,
     Path,
     Rect,
@@ -170,6 +175,9 @@ pub trait IndexedShapesVisitor<R = ()> {
     fn indexed_circle(&mut self, _index: usize, _circle: &mut CircleShape) -> Option<R> {
         None
     }
+    fn indexed_ellipse(&mut self, _index: usize, _ellipse: &mut EllipseShape) -> Option<R> {
+        None
+    }
     fn indexed_rect(&mut self, _index: usize, _rect: &mut RectShape) -> Option<R> {
         None
     }
@@ -220,6 +228,7 @@ pub trait IndexedShapesVisitor<R = ()> {
             Shape::QuadraticBezier(qb) => self.indexed_quadratic_bezier(index, qb),
             Shape::CubicBezier(cb) => self.indexed_cubic_bezier(index, cb),
             Shape::Callback(callback) => self.indexed_paint_callback(index, callback),
+            Shape::Ellipse(ellipse) => self.indexed_ellipse(index, ellipse),
         }
     }
 }
@@ -328,6 +337,50 @@ impl<'a, R, T: IndexedShapeControlPointsVisitor<R>> ShapeVisitor<R, ShapePointIn
             );
             circle.radius = radius_point.distance(circle.center);
             result
+        });
+
+        index.assign_next_shape();
+        result
+    }
+
+    fn ellipse(&mut self, index: &mut ShapePointIndex, ellipse: &mut EllipseShape) -> Option<R> {
+        let result = {
+            let result = self
+                .0
+                .indexed_path_point(*index, &mut ellipse.center, ShapeType::Ellipse);
+            index.assign_next_point();
+            result
+        }
+        .or_else(|| {
+            {
+                let mut radius_point = ellipse
+                    .center
+                    .add(Vec2::angled(std::f32::consts::TAU / 8.0) * ellipse.radius.x);
+                let connected = HashMap::from_iter([(index.prev_point(), ellipse.center)]);
+                let result = self.0.indexed_control_point(
+                    *index,
+                    &mut radius_point,
+                    connected,
+                    ShapeType::Circle,
+                );
+                ellipse.radius.x = radius_point.distance(ellipse.center);
+                index.assign_next_point();
+                result
+            }
+            .or_else(|| {
+                let mut radius_point = ellipse
+                    .center
+                    .add(Vec2::angled(std::f32::consts::TAU / 8.0) * ellipse.radius.y);
+                let connected = HashMap::from_iter([(index.prev_point(), ellipse.center)]);
+                let result = self.0.indexed_control_point(
+                    *index,
+                    &mut radius_point,
+                    connected,
+                    ShapeType::Circle,
+                );
+                ellipse.radius.y = radius_point.distance(ellipse.center);
+                result
+            })
         });
 
         index.assign_next_shape();

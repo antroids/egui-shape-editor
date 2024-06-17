@@ -5,9 +5,10 @@ use crate::shape_editor::visitor::{
 use derivative::Derivative;
 use egui::ahash::HashSet;
 use egui::epaint::{
-    CircleShape, CubicBezierShape, PathShape, QuadraticBezierShape, RectShape, TextShape,
+    CircleShape, Color32, CubicBezierShape, EllipseShape, PathShape, QuadraticBezierShape,
+    RectShape, Shape, Stroke, TextShape,
 };
-use egui::{Color32, Mesh, Pos2, Rounding, Shape, Stroke, TextureId};
+use egui::{Mesh, Pos2, Rounding, TextureId};
 use num_traits::Zero;
 use ordered_float::NotNan;
 use std::collections::BTreeMap;
@@ -154,6 +155,26 @@ impl IndexedShapesVisitor for ExtractShapeParamsVisitor {
                         ParamType::Radius,
                         ParamValue::Float(not_nan_f32(circle.radius)),
                     ),
+                ]),
+            );
+        }
+        self.shapes.is_empty().then_some(())
+    }
+
+    fn indexed_ellipse(&mut self, index: usize, ellipse: &mut EllipseShape) -> Option<()> {
+        if self.shapes.remove(&index) {
+            self.shape_params.insert(
+                index,
+                BTreeMap::from_iter([
+                    (
+                        ParamType::StrokeColor,
+                        ParamValue::Color(ellipse.stroke.color),
+                    ),
+                    (
+                        ParamType::StrokeWidth,
+                        ParamValue::Float(not_nan_f32(ellipse.stroke.width)),
+                    ),
+                    (ParamType::FillColor, ParamValue::Color(ellipse.fill)),
                 ]),
             );
         }
@@ -331,6 +352,33 @@ impl IndexedShapesVisitor for ApplyShapeParamsVisitor {
                     }
                     (ParamType::FillColor, ParamValue::Color(v)) => {
                         std::mem::swap(v, &mut circle.fill);
+                    }
+                    _ => continue,
+                }
+                changed.insert(param.0, param.1);
+            }
+            if !changed.is_empty() {
+                self.changed_params.insert(index, changed);
+            }
+        }
+        self.shape_params.is_empty().then_some(())
+    }
+
+    fn indexed_ellipse(&mut self, index: usize, ellipse: &mut EllipseShape) -> Option<()> {
+        if let Some(params) = self.shape_params.remove(&index) {
+            let mut changed = BTreeMap::default();
+            for mut param in params {
+                match &mut param {
+                    (ParamType::StrokeColor, ParamValue::Color(v)) => {
+                        std::mem::swap(v, &mut ellipse.stroke.color);
+                    }
+                    (ParamType::StrokeWidth, ParamValue::Float(v)) => {
+                        let mut value = not_nan_f32(ellipse.stroke.width);
+                        std::mem::swap(v, &mut value);
+                        ellipse.stroke.width = value.into_inner();
+                    }
+                    (ParamType::FillColor, ParamValue::Color(v)) => {
+                        std::mem::swap(v, &mut ellipse.fill);
                     }
                     _ => continue,
                 }

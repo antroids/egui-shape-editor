@@ -1,8 +1,8 @@
 use crate::shape_editor::visitor::{visit_shape, ShapeVisitor};
 use egui::emath::{Pos2, Rect, RectTransform, Vec2};
 use egui::epaint::{
-    CircleShape, CubicBezierShape, Mesh, PathShape, QuadraticBezierShape, RectShape, Shape, Stroke,
-    TextShape,
+    CircleShape, CubicBezierShape, EllipseShape, Mesh, PathShape, QuadraticBezierShape, RectShape,
+    Shape, Stroke, TextShape,
 };
 use egui::Rangef;
 
@@ -166,6 +166,12 @@ impl ShapeVisitor for TransformShape {
     fn circle(&mut self, _index: &mut usize, c: &mut CircleShape) -> Option<()> {
         c.center = self.0.transform_pos(c.center);
         c.radius *= self.0.scale().x;
+        None
+    }
+
+    fn ellipse(&mut self, _index: &mut usize, ellipse: &mut EllipseShape) -> Option<()> {
+        ellipse.center = self.0.transform_pos(ellipse.center);
+        ellipse.radius *= self.0.scale().x;
         None
     }
 

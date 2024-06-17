@@ -28,7 +28,7 @@ impl ShapeAction for AddShapePoints {
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
-        selection: &mut Selection,
+        _selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
         let owned = *self;
         let mut visitor = AddShapePointsVisitor {
@@ -36,11 +36,9 @@ impl ShapeAction for AddShapePoints {
             added: Default::default(),
         };
         IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
-        let mut shift = 0;
         let mut shift_shape_index = 0;
         for added_shape_point_index in visitor.added.iter() {
             if shift_shape_index != added_shape_point_index.shape_index {
-                shift = 0;
                 shift_shape_index = added_shape_point_index.shape_index;
             }
         }

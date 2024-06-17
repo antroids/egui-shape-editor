@@ -55,6 +55,8 @@ impl ShapeEditorMemory {
             } else {
                 self.begin_interaction(ChangeSelectionOnPrimary)
             }
+        } else if ctx.input.mouse_primary_pressed {
+            self.begin_interaction(ChangeSelectionOnPrimary)
         }
 
         if ctx.input.mouse_zoom_delta != 1.0 {
@@ -150,7 +152,7 @@ impl Interaction for MoveShapeControlPoints {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         puffin_egui::puffin::profile_function!();
-        if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
+        if ctx.input.drag_stopped || ctx.input.mouse_primary_pressed {
             if self.end_pos != self.start_pos && memory.selection().has_control_points() {
                 let move_action = move_shape_points::MoveShapePoints::from_index_and_translation(
                     memory.selection().control_points(),
@@ -193,7 +195,7 @@ impl Interaction for Selection {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         puffin_egui::puffin::profile_function!();
-        if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
+        if ctx.input.drag_stopped || ctx.input.mouse_primary_pressed {
             None
         } else {
             self.rect.max = ctx.input.mouse_pos;
@@ -230,7 +232,7 @@ impl Interaction for Pan {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         puffin_egui::puffin::profile_function!();
-        if ctx.input.drag_released || ctx.input.mouse_primary_pressed {
+        if ctx.input.drag_stopped {
             None
         } else {
             memory.set_transform(
@@ -365,6 +367,7 @@ impl Interaction for AddPoint {
                 .unwrap_or(ctx.input.canvas_content_mouse_pos);
             match shape_type {
                 ShapeType::Circle => {}
+                ShapeType::Ellipse => {}
                 ShapeType::LineSegment => {
                     memory.apply_boxed_action(
                         Box::new(InsertShape::from_shape(Shape::LineSegment {
@@ -483,10 +486,7 @@ impl Interaction for ChangeSelectionOnPrimary {
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
         puffin_egui::puffin::profile_function!();
-        if ctx.input.canvas_mouse_hover_pos.is_some()
-            && ctx.input.mouse_primary_pressed
-            && memory.interaction().is_empty()
-        {
+        if ctx.input.canvas_mouse_hover_pos.is_some() && memory.interaction().is_empty() {
             let next_selected =
                 memory
                     .selection()
@@ -501,7 +501,7 @@ impl Interaction for ChangeSelectionOnPrimary {
                     });
             if !(ctx.input.action_modifier.do_not_deselect_selected_points()
                 || ctx.input.action_modifier.add_point_on_click()
-                || ctx.input.drag_started
+                || ctx.input.mouse_primary_down
                     && ctx.hovered_ui_shape_points.keys().any(|hovered_index| {
                         memory.selection().is_control_point_selected(hovered_index)
                     }))
@@ -537,6 +537,17 @@ impl AddPointsThanShape {
             ShapeType::Circle => Self::with_start_point(point, 2, |points, options| {
                 if let &[p0, p1, ..] = points.as_slice() {
                     Some(Shape::circle_stroke(p0, p0.distance(p1), options.stroke))
+                } else {
+                    None
+                }
+            }),
+            ShapeType::Ellipse => Self::with_start_point(point, 3, |points, options| {
+                if let &[p0, p1, p2, ..] = points.as_slice() {
+                    Some(Shape::ellipse_stroke(
+                        p0,
+                        Vec2::new(p0.distance(p1), p0.distance(p2)),
+                        options.stroke,
+                    ))
                 } else {
                     None
                 }

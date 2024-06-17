@@ -9,14 +9,16 @@ use crate::shape_editor::memory::ShapeEditorMemory;
 use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
 use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::HashMap;
+use egui::emath::One;
 use egui::{
-    Color32, Context, Key, KeyboardShortcut, Modifiers, Painter, Pos2, Rect, Response, Shape,
-    Stroke, Ui, Vec2,
+    Color32, Context, Key, KeyboardShortcut, Modifiers, Painter, PointerButton, Pos2, Rect,
+    Response, Shape, Stroke, Ui, Vec2,
 };
 use itertools::Itertools;
 use strum::EnumIter;
 use strum::IntoEnumIterator;
 
+#[derive(Default, Debug)]
 pub(crate) struct ActionModifier(Modifiers);
 
 impl ActionModifier {
@@ -69,7 +71,7 @@ impl CanvasTransform {
     }
 }
 
-#[derive(Clone, Copy, EnumIter, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, EnumIter, PartialEq, Eq, Hash, Debug)]
 pub enum KeyboardAction {
     AddPoint,
     DeletePoint,
@@ -91,6 +93,7 @@ impl KeyboardAction {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct CanvasInput {
     pub mouse_hover_pos: Option<Pos2>,
     pub mouse_pos: Pos2,
@@ -98,9 +101,11 @@ pub(crate) struct CanvasInput {
     pub canvas_mouse_hover_pos: Option<Pos2>,
     pub mouse_primary_pressed: bool,
     pub mouse_primary_clicked: bool,
+    pub mouse_primary_down: bool,
     pub mouse_secondary_pressed: bool,
+    pub mouse_secondary_down: bool,
     pub drag_started: bool,
-    pub drag_released: bool,
+    pub drag_stopped: bool,
     pub action_modifier: ActionModifier,
     pub keyboard_action: Option<KeyboardAction>,
     pub mouse_scroll_delta: Vec2,
@@ -112,7 +117,6 @@ impl CanvasInput {
     fn new(
         options: &ShapeEditorOptions,
         response: &Response,
-        ui: &Ui,
         transform: &CanvasTransform,
         last_mouse_hover_pos: Pos2,
     ) -> Self {
@@ -124,31 +128,49 @@ impl CanvasInput {
         let (
             mouse_primary_pressed,
             mouse_secondary_pressed,
+            mouse_primary_down,
+            mouse_secondary_down,
             action_modifier,
             mouse_primary_clicked,
             canvas_action,
             mouse_scroll_delta,
             mouse_zoom_delta,
-        ) = ui.input_mut(|input| {
+        ) = if response.context_menu_opened() {
             (
-                input.pointer.primary_pressed(),
-                input.pointer.secondary_pressed(),
-                ActionModifier(input.modifiers),
-                input.pointer.primary_clicked(),
-                KeyboardAction::iter().find(|canvas_action| {
-                    input.consume_shortcut(
-                        options
-                            .keyboard_shortcuts
-                            .get(canvas_action)
-                            .unwrap_or(canvas_action.default_keyboard_shortcut()),
-                    )
-                }),
-                input.smooth_scroll_delta,
-                input.zoom_delta(),
+                false,
+                false,
+                false,
+                false,
+                ActionModifier::default(),
+                false,
+                None,
+                Vec2::ZERO,
+                f32::ONE,
             )
-        });
+        } else {
+            response.ctx.input_mut(|input| {
+                (
+                    input.pointer.button_pressed(PointerButton::Primary),
+                    input.pointer.button_pressed(PointerButton::Secondary),
+                    input.pointer.button_down(PointerButton::Primary),
+                    input.pointer.button_down(PointerButton::Secondary),
+                    ActionModifier(input.modifiers),
+                    input.pointer.primary_clicked(),
+                    KeyboardAction::iter().find(|canvas_action| {
+                        input.consume_shortcut(
+                            options
+                                .keyboard_shortcuts
+                                .get(canvas_action)
+                                .unwrap_or(canvas_action.default_keyboard_shortcut()),
+                        )
+                    }),
+                    input.smooth_scroll_delta,
+                    input.zoom_delta(),
+                )
+            })
+        };
         let drag_started = response.drag_started();
-        let drag_released = response.drag_released();
+        let drag_stopped = response.drag_stopped();
         let drag_delta = response.drag_delta();
 
         Self {
@@ -158,10 +180,12 @@ impl CanvasInput {
             canvas_mouse_hover_pos,
             mouse_primary_pressed,
             mouse_primary_clicked,
+            mouse_primary_down,
             mouse_secondary_pressed,
+            mouse_secondary_down,
             action_modifier,
             drag_started,
-            drag_released,
+            drag_stopped,
             keyboard_action: canvas_action,
             mouse_scroll_delta,
             mouse_zoom_delta,
@@ -170,11 +194,11 @@ impl CanvasInput {
     }
 
     pub fn primary_drag_started(&self) -> bool {
-        self.drag_started && self.mouse_primary_pressed
+        self.drag_started && self.mouse_primary_down
     }
 
     pub fn secondary_drag_started(&self) -> bool {
-        self.drag_started && self.mouse_secondary_pressed
+        self.drag_started && self.mouse_secondary_down
     }
 }
 
@@ -200,13 +224,7 @@ impl CanvasContext {
         style: &dyn style::Style,
     ) -> Self {
         let transform = CanvasTransform::new(canvas_rect, &memory.transform());
-        let input = CanvasInput::new(
-            options,
-            response,
-            ui,
-            &transform,
-            memory.last_mouse_hover_pos(),
-        );
+        let input = CanvasInput::new(options, response, &transform, memory.last_mouse_hover_pos());
         let painter = ui.painter_at(canvas_rect);
         let grid_index = GridIndex::from_transform(&transform);
         let mut ui_shape = transform.canvas_content_to_ui.transform_shape(shape);

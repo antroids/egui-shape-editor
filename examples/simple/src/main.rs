@@ -1,11 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use egui::epaint::CubicBezierShape;
+use egui::epaint::{Color32, CubicBezierShape, Shape, Stroke};
 use egui::panel::TopBottomSide;
-use egui::{
-    Color32, Context, DragValue, Response, Rounding, Shape, Stroke, Style, Ui, Visuals, Widget,
-    WidgetText,
-};
+use egui::{Context, DragValue, Response, Rounding, Style, Ui, Visuals, Widget, WidgetText};
 use egui_shape_editor::shape_editor::style::Light;
 use egui_shape_editor::shape_editor::{
     ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions,
@@ -343,6 +340,7 @@ enum ShapeAdapter {
         Vec<Shape>,
     ),
     Circle(egui::epaint::CircleShape),
+    Ellipse(egui::epaint::EllipseShape),
     LineSegment {
         points: [egui::Pos2; 2],
         stroke: Stroke,

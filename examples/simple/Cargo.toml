@@ -9,18 +9,18 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egui =  { version = "0.26.2", features = ["serde"] }
-eframe = { version = "0.26.2", features = ["glow", "default_fonts", "puffin"]}
+egui = { version = "0.27.2", features = ["serde"] }
+eframe = { version = "0.27.2", features = ["glow", "default_fonts", "puffin"] }
 log = "0.4"
 env_logger = "0.11.0"
-egui-shape-editor = { path="../.." }
+egui-shape-editor = { path = "../.." }
 serde = "1.0.197"
 
 
 
 # non web
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-puffin_egui = "0.26.0"
+puffin_egui = "0.27.0"
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
