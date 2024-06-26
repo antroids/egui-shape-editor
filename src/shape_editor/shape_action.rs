@@ -15,9 +15,12 @@ pub trait ShapeAction: DynClone + Send + Sync {
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
-        _selection: &mut Selection,
+        selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
-        self.apply(shape)
+        Box::new(RestoreSelectionActionWrapper::new(
+            self.apply(shape),
+            selection.clone(),
+        ))
     }
     fn short_name(&self) -> String;
 }
@@ -64,23 +67,40 @@ impl ShapeAction for Combined {
         Box::new(Self::new(format!("Undo {}", owned.short_name), inverted))
     }
 
+    fn short_name(&self) -> String {
+        self.short_name.clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct RestoreSelectionActionWrapper {
+    action: Box<dyn ShapeAction>,
+    selection: Selection,
+}
+
+impl RestoreSelectionActionWrapper {
+    pub fn new(action: Box<dyn ShapeAction>, selection: Selection) -> Self {
+        Self { action, selection }
+    }
+}
+
+impl ShapeAction for RestoreSelectionActionWrapper {
+    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+        self.action.apply(shape)
+    }
+
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
         selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
-        let owned = *self;
-        let inverted: Vec<Box<dyn ShapeAction>> = owned
-            .actions
-            .into_iter()
-            .map(|action| action.apply_with_selection(shape, selection))
-            .rev()
-            .collect();
-        Box::new(Self::new(format!("Undo {}", owned.short_name), inverted))
+        let result = self.action.apply_with_selection(shape, selection);
+        *selection = self.selection;
+        result
     }
 
     fn short_name(&self) -> String {
-        self.short_name.clone()
+        self.action.short_name()
     }
 }
 

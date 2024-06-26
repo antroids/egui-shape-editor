@@ -1,6 +1,8 @@
 use crate::shape_editor::shape_action::add_shape_points::AddShapePoints;
 use crate::shape_editor::shape_action::replace_shapes::{ReplaceShapes, ReplaceShapesVisitor};
-use crate::shape_editor::shape_action::{Combined, ShapeAction, ShapePoint};
+use crate::shape_editor::shape_action::{
+    Combined, RestoreSelectionActionWrapper, ShapeAction, ShapePoint,
+};
 use crate::shape_editor::utils::b_tree_map_grouped_by;
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapePointIndex, ShapeVisitor,
@@ -25,9 +27,9 @@ impl ShapeAction for RemoveShapePoints {
     ) -> Box<dyn ShapeAction> {
         let owned = *self;
         let mut points_visitor = RemoveShapePointsVisitor::from_iter(owned.0.iter());
+        let selection_state = std::mem::replace(selection, Selection::default());
         IndexedShapesVisitorAdapter(&mut points_visitor).visit(shape);
-        points_visitor.update_selection(selection);
-        if points_visitor.shapes_to_remove.is_empty() {
+        let revert_action: Box<dyn ShapeAction> = if points_visitor.shapes_to_remove.is_empty() {
             Box::new(AddShapePoints(points_visitor.removed_points))
         } else {
             let mut shapes_visitor =
@@ -40,7 +42,11 @@ impl ShapeAction for RemoveShapePoints {
                     Box::new(AddShapePoints(points_visitor.removed_points)),
                 ],
             ))
-        }
+        };
+        Box::new(RestoreSelectionActionWrapper::new(
+            revert_action,
+            selection_state,
+        ))
     }
 
     fn short_name(&self) -> String {
@@ -62,50 +68,6 @@ impl RemoveShapePointsVisitor {
             points_to_remove,
             shapes_to_remove: Default::default(),
             removed_points: Default::default(),
-        }
-    }
-
-    fn update_selection(&self, selection: &mut Selection) {
-        for shape_index in &self.shapes_to_remove {
-            let range = selection
-                .control_points_mut()
-                .range(&(*shape_index, 0).into()..&(*shape_index + 1, 0).into());
-            let Some(right_shape_point_index) = range.last().map(|p| p.point_index) else {
-                continue;
-            };
-            for point_index in 0..=right_shape_point_index {
-                selection
-                    .control_points_mut()
-                    .remove(&(*shape_index, point_index).into());
-            }
-        }
-        for (shape_index, removed_shape_points) in &self.removed_points {
-            let Some(left_point_index) = removed_shape_points.first_key_value().map(|p| *p.0)
-            else {
-                continue;
-            };
-            let range = selection
-                .control_points_mut()
-                .range(&(*shape_index, 0).into()..&(*shape_index + 1, 0).into());
-            let Some(right_shape_point_index) = range.last().map(|p| p.point_index) else {
-                continue;
-            };
-            let mut shift = 0;
-            for point_index in left_point_index..=right_shape_point_index {
-                if removed_shape_points.contains_key(&point_index) {
-                    selection
-                        .control_points_mut()
-                        .remove(&(*shape_index, point_index).into());
-                    shift += 1;
-                } else if shift > 0 {
-                    selection
-                        .control_points_mut()
-                        .remove(&(*shape_index, point_index).into());
-                    selection
-                        .control_points_mut()
-                        .insert((*shape_index, point_index - shift).into());
-                }
-            }
         }
     }
 }

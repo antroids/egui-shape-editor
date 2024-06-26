@@ -1,5 +1,5 @@
 use crate::shape_editor::shape_action::remove_shape_points::RemoveShapePoints;
-use crate::shape_editor::shape_action::{ShapeAction, ShapePoint};
+use crate::shape_editor::shape_action::{RestoreSelectionActionWrapper, ShapeAction, ShapePoint};
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapePointIndex, ShapeVisitor,
 };
@@ -22,26 +22,12 @@ impl AddShapePoints {
 
 impl ShapeAction for AddShapePoints {
     fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
-        self.apply_with_selection(shape, &mut Selection::default())
-    }
-
-    fn apply_with_selection(
-        self: Box<Self>,
-        shape: &mut Shape,
-        _selection: &mut Selection,
-    ) -> Box<dyn ShapeAction> {
         let owned = *self;
         let mut visitor = AddShapePointsVisitor {
             index_to_add: owned.0,
             added: Default::default(),
         };
         IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
-        let mut shift_shape_index = 0;
-        for added_shape_point_index in visitor.added.iter() {
-            if shift_shape_index != added_shape_point_index.shape_index {
-                shift_shape_index = added_shape_point_index.shape_index;
-            }
-        }
         Box::new(RemoveShapePoints(visitor.added))
     }
 
