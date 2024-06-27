@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::add_shape_points::AddShapePoints;
 use crate::shape_editor::shape_action::replace_shapes::{ReplaceShapes, ReplaceShapesVisitor};
 use crate::shape_editor::shape_action::{
@@ -16,13 +17,18 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct RemoveShapePoints(pub BTreeSet<ShapePointIndex>);
 
 impl ShapeAction for RemoveShapePoints {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
-        self.apply_with_selection(shape, &mut Selection::default())
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
+        self.apply_with_selection(shape, constraints, &mut Selection::default())
     }
 
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
+        _constraints: &mut Constraints,
         selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
         let owned = *self;

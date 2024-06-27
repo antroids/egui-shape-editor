@@ -13,6 +13,7 @@ pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams}
 
 mod canvas;
 mod canvas_context_menu;
+mod constraints;
 mod control_point;
 mod grid;
 mod index;

@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapeVisitor,
@@ -536,7 +537,11 @@ impl ApplyShapeParams {
 }
 
 impl ShapeAction for ApplyShapeParams {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        _constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         let mut visitor = ApplyShapeParamsVisitor {
             shape_params: (*self).0,
             changed_params: Default::default(),

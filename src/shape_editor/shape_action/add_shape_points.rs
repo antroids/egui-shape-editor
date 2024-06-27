@@ -1,9 +1,9 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::remove_shape_points::RemoveShapePoints;
-use crate::shape_editor::shape_action::{RestoreSelectionActionWrapper, ShapeAction, ShapePoint};
+use crate::shape_editor::shape_action::{ShapeAction, ShapePoint};
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapePointIndex, ShapeVisitor,
 };
-use crate::shape_editor::Selection;
 use egui::Shape;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,7 +21,11 @@ impl AddShapePoints {
 }
 
 impl ShapeAction for AddShapePoints {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        _constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         let owned = *self;
         let mut visitor = AddShapePointsVisitor {
             index_to_add: owned.0,

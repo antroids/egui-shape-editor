@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::visitor::{
     IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapeVisitor,
@@ -18,7 +19,11 @@ impl ReplaceShapes {
 }
 
 impl ShapeAction for ReplaceShapes {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        _constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         let mut visitor = ReplaceShapesVisitor::new(self.shapes_to_replace);
         IndexedShapesVisitorAdapter(&mut visitor).visit(shape);
         Box::new(Self::new(visitor.replaced_shapes))

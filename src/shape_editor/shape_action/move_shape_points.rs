@@ -1,9 +1,10 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::visitor::{
     IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter, ShapePointIndex,
     ShapeType, ShapeVisitor,
 };
-use egui::ahash::HashMap;
+use egui::ahash::{HashMap, HashSet};
 use egui::{Pos2, Shape, Vec2};
 use std::ops::{AddAssign, DerefMut, Neg};
 
@@ -71,10 +72,37 @@ impl MoveShapePoints {
                 .collect(),
         )
     }
+
+    fn apply_translation_propagation(
+        &mut self,
+        translation_propagation: &HashMap<ShapePointIndex, HashSet<ShapePointIndex>>,
+    ) {
+        let mut connected_translations: HashMap<ShapePointIndex, Vec2> = HashMap::default();
+        for (from, transform) in &self.0 {
+            if let Some(mut connected_set) = translation_propagation.get(from).cloned() {
+                while !connected_set.is_empty() {
+                    for to in std::mem::replace(&mut connected_set, HashSet::default()) {
+                        if !connected_translations.contains_key(&to) {
+                            connected_translations.insert(to, *transform);
+                            if let Some(set) = translation_propagation.get(&to) {
+                                connected_set.extend(set);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.0.extend(connected_translations);
+    }
 }
 
 impl ShapeAction for MoveShapePoints {
-    fn apply(mut self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        mut self: Box<Self>,
+        shape: &mut Shape,
+        constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
+        self.apply_translation_propagation(&constraints.translation_propagation);
         IndexedShapeControlPointsVisitorAdapter(self.deref_mut()).visit(shape);
         Box::new(self.invert())
     }

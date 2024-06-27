@@ -177,7 +177,7 @@ impl Interaction for MoveShapeControlPoints {
                         &(snap_point - self.end_pos),
                     ),
                 )
-                .apply(shape);
+                .apply(shape, &mut memory.constraints);
                 self.end_pos = snap_point;
             }
             Some(self)

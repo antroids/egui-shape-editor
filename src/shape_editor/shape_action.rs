@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::Selection;
 use dyn_clone::DynClone;
 use egui::emath::Pos2;
@@ -11,14 +12,19 @@ pub mod remove_shape_points;
 pub mod replace_shapes;
 
 pub trait ShapeAction: DynClone + Send + Sync {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction>;
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction>;
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
+        constraints: &mut Constraints,
         selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
         Box::new(RestoreSelectionActionWrapper::new(
-            self.apply(shape),
+            self.apply(shape, constraints),
             selection.clone(),
         ))
     }
@@ -31,7 +37,11 @@ dyn_clone::clone_trait_object!(ShapeAction);
 pub struct Noop;
 
 impl ShapeAction for Noop {
-    fn apply(self: Box<Self>, _shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        self: Box<Self>,
+        _shape: &mut Shape,
+        _constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         self
     }
 
@@ -56,12 +66,16 @@ impl Combined {
 }
 
 impl ShapeAction for Combined {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         let owned = *self;
         let inverted: Vec<Box<dyn ShapeAction>> = owned
             .actions
             .into_iter()
-            .map(|action| action.apply(shape))
+            .map(|action| action.apply(shape, constraints))
             .rev()
             .collect();
         Box::new(Self::new(format!("Undo {}", owned.short_name), inverted))
@@ -85,16 +99,23 @@ impl RestoreSelectionActionWrapper {
 }
 
 impl ShapeAction for RestoreSelectionActionWrapper {
-    fn apply(self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
-        self.action.apply(shape)
+    fn apply(
+        self: Box<Self>,
+        shape: &mut Shape,
+        constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
+        self.action.apply(shape, constraints)
     }
 
     fn apply_with_selection(
         self: Box<Self>,
         shape: &mut Shape,
+        constraints: &mut Constraints,
         selection: &mut Selection,
     ) -> Box<dyn ShapeAction> {
-        let result = self.action.apply_with_selection(shape, selection);
+        let result = self
+            .action
+            .apply_with_selection(shape, constraints, selection);
         *selection = self.selection;
         result
     }

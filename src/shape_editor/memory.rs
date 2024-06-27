@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::interaction::Interaction;
 use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::snap::SnapInfo;
@@ -14,6 +15,7 @@ pub struct ShapeEditorMemory {
     last_canvas_mouse_hover_pos: Pos2,
     selection: Selection,
     pub(crate) snap: SnapInfo,
+    pub(crate) constraints: Constraints,
 }
 
 impl Default for ShapeEditorMemory {
@@ -26,6 +28,7 @@ impl Default for ShapeEditorMemory {
             last_canvas_mouse_hover_pos: Pos2::ZERO,
             selection: Default::default(),
             snap: Default::default(),
+            constraints: Constraints::default(),
         }
     }
 }
@@ -41,7 +44,8 @@ impl ShapeEditorMemory {
 
     pub(crate) fn apply_boxed_action(&mut self, action: Box<dyn ShapeAction>, shape: &mut Shape) {
         let short_name = action.short_name();
-        let undo_action = action.apply_with_selection(shape, &mut self.selection);
+        let undo_action =
+            action.apply_with_selection(shape, &mut self.constraints, &mut self.selection);
         self.push_action_history(undo_action, short_name)
     }
 
@@ -51,7 +55,7 @@ impl ShapeEditorMemory {
 
     pub(crate) fn undo(&mut self, shape: &mut Shape) {
         if let Some((action, _)) = self.action_history.pop() {
-            action.apply_with_selection(shape, &mut self.selection);
+            action.apply_with_selection(shape, &mut self.constraints, &mut self.selection);
         }
     }
 

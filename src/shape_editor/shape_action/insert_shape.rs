@@ -1,3 +1,4 @@
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::replace_shapes::ReplaceShapesVisitor;
 use crate::shape_editor::shape_action::{Noop, ShapeAction};
 use crate::shape_editor::visitor::{CountShapes, IndexedShapesVisitorAdapter, ShapeVisitor};
@@ -83,7 +84,11 @@ impl From<Shape> for InsertShape {
 }
 
 impl ShapeAction for InsertShape {
-    fn apply(mut self: Box<Self>, shape: &mut Shape) -> Box<dyn ShapeAction> {
+    fn apply(
+        mut self: Box<Self>,
+        shape: &mut Shape,
+        _constraints: &mut Constraints,
+    ) -> Box<dyn ShapeAction> {
         if let Some(replace) = self.replace {
             let mut visitor =
                 ReplaceShapesVisitor::single(replace, self.shape.unwrap_or(Shape::Noop));
