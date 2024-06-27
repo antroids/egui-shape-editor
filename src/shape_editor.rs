@@ -45,6 +45,7 @@ pub struct ShapeEditorOptions {
     pub snap_enabled_by_default: bool,
     pub keyboard_shortcuts: HashMap<KeyboardAction, KeyboardShortcut>,
     pub context_menu_add_shapes: Vec<ShapeType>,
+    pub connect_chained_shapes: bool,
 }
 
 impl Default for ShapeEditorOptions {
@@ -68,6 +69,7 @@ impl Default for ShapeEditorOptions {
             snap_enabled_by_default: true,
             keyboard_shortcuts: Default::default(),
             context_menu_add_shapes,
+            connect_chained_shapes: true,
         }
     }
 }

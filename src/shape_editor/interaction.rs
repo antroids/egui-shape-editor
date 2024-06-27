@@ -349,25 +349,23 @@ impl Interaction for AddPoint {
         options: &ShapeEditorOptions,
         ctx: &CanvasContext,
     ) -> Option<Box<dyn Interaction>> {
-        let Some(selected_point) = memory.selection().single_control_point() else {
+        let Some(&selected_point) = memory.selection().single_control_point() else {
             return None;
         };
         let Some(ShapeControlPoint::PathPoint { position, .. }) =
-            ctx.shape_control_points.by_index(selected_point).cloned()
+            ctx.shape_control_points.by_index(&selected_point).cloned()
         else {
             return None;
         };
         if let Some(shape_type) = ctx
             .shape_control_points
-            .shape_type_by_control_point(selected_point)
+            .shape_type_by_control_point(&selected_point)
         {
             let mouse_pos = memory
                 .snap()
                 .snap_point
                 .unwrap_or(ctx.input.canvas_content_mouse_pos);
-            match shape_type {
-                ShapeType::Circle => {}
-                ShapeType::Ellipse => {}
+            let new_point_index = match shape_type {
                 ShapeType::LineSegment => {
                     memory.apply_boxed_action(
                         Box::new(InsertShape::from_shape(Shape::LineSegment {
@@ -376,11 +374,7 @@ impl Interaction for AddPoint {
                         })),
                         shape,
                     );
-                    if let Some(last_index) = LastShapePointIndex::last_index(shape) {
-                        memory
-                            .selection_mut()
-                            .select_single_control_point(last_index);
-                    }
+                    LastShapePointIndex::last_index(shape).unwrap_or(selected_point)
                 }
                 ShapeType::Path => {
                     let new_point_index = selected_point.next_point();
@@ -391,17 +385,12 @@ impl Interaction for AddPoint {
                         )),
                         shape,
                     );
-                    memory
-                        .selection_mut()
-                        .select_single_control_point(new_point_index);
+                    new_point_index
                 }
-                ShapeType::Rect => {}
-                ShapeType::Text => {}
-                ShapeType::Mesh => {}
                 ShapeType::QuadraticBezier => {
                     let control_point = ctx
                         .shape_control_points
-                        .connected_bezier_control_point(selected_point);
+                        .connected_bezier_control_point(&selected_point);
                     memory.apply_boxed_action(
                         Box::new(InsertShape::quadratic_bezier_from_two_points(
                             position,
@@ -411,16 +400,12 @@ impl Interaction for AddPoint {
                         )),
                         shape,
                     );
-                    if let Some(last_index) = LastShapePointIndex::last_index(shape) {
-                        memory
-                            .selection_mut()
-                            .select_single_control_point(last_index);
-                    }
+                    LastShapePointIndex::last_index(shape).unwrap_or(selected_point)
                 }
                 ShapeType::CubicBezier => {
                     let start_control_point = ctx
                         .shape_control_points
-                        .connected_bezier_control_point(selected_point);
+                        .connected_bezier_control_point(&selected_point);
                     memory.apply_boxed_action(
                         Box::new(InsertShape::cubic_bezier_from_two_points(
                             position,
@@ -430,13 +415,20 @@ impl Interaction for AddPoint {
                         )),
                         shape,
                     );
-                    if let Some(last_index) = LastShapePointIndex::last_index(shape) {
-                        memory
-                            .selection_mut()
-                            .select_single_control_point(last_index);
-                    }
+                    LastShapePointIndex::last_index(shape).unwrap_or(selected_point)
                 }
-                ShapeType::Callback => {}
+                _ => return None,
+            };
+            memory
+                .selection_mut()
+                .select_single_control_point(new_point_index);
+            if options.connect_chained_shapes
+                && selected_point.shape_index != new_point_index.shape_index
+            {
+                memory.constraints.connect_translation_bidirectional(
+                    selected_point,
+                    new_point_index.first_point(),
+                );
             }
         }
         None
