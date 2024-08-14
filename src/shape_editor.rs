@@ -1,7 +1,9 @@
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
+use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::ShapeAction;
 use crate::shape_editor::shape_params::ApplyShapeParams;
-use crate::shape_editor::visitor::{ShapePointIndex, ShapeType};
+pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams};
+pub use crate::shape_editor::shape_visitor::{ShapePointIndex, ShapeType};
 use egui::ahash::{HashMap, HashSet};
 use egui::{Color32, Context, Id, KeyboardShortcut, Response, Sense, Shape, Stroke, Ui, Vec2};
 use memory::ShapeEditorMemory;
@@ -9,11 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use transform::Transform;
 
-pub use crate::shape_editor::shape_params::{ParamType, ParamValue, ShapesParams};
-
 mod canvas;
 mod canvas_context_menu;
-mod constraints;
+pub mod constraints;
 mod control_point;
 mod grid;
 mod index;
@@ -22,11 +22,11 @@ mod memory;
 mod rulers;
 mod shape_action;
 mod shape_params;
+mod shape_visitor;
 mod snap;
 pub mod style;
 mod transform;
 mod utils;
-mod visitor;
 
 pub struct ShapeEditor<'a> {
     pub id: Id,
@@ -228,6 +228,14 @@ impl<'a> ShapeEditor<'a> {
                 mem,
             )
         })
+    }
+
+    pub fn with_constraints_mut<R>(
+        &self,
+        ctx: &Context,
+        func: impl FnOnce(&mut Constraints) -> R,
+    ) -> R {
+        memory_mut(self.id, ctx, |mem| func(&mut mem.constraints))
     }
 }
 

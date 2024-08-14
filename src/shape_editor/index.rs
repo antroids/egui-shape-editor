@@ -1,6 +1,6 @@
 use crate::shape_editor::canvas::CanvasTransform;
+use crate::shape_editor::shape_visitor::ShapePointIndex;
 use crate::shape_editor::utils;
-use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::HashMap;
 use egui::{Pos2, Rect};
 use num_traits::{Bounded, Zero};

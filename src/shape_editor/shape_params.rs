@@ -1,8 +1,9 @@
 use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::ShapeAction;
-use crate::shape_editor::visitor::{
-    IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapeVisitor,
+use crate::shape_editor::shape_visitor::indexed_shapes_visitor::{
+    IndexedShapesVisitor, IndexedShapesVisitorAdapter,
 };
+use crate::shape_editor::shape_visitor::ShapeVisitor;
 use derivative::Derivative;
 use egui::ahash::HashSet;
 use egui::epaint::{

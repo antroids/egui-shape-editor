@@ -1,4 +1,4 @@
-use crate::shape_editor::visitor::{visit_shape, ShapeVisitor};
+use crate::shape_editor::shape_visitor::{visit_shape, ShapeVisitor};
 use egui::emath::{Pos2, Rect, RectTransform, Vec2};
 use egui::epaint::{
     CircleShape, CubicBezierShape, EllipseShape, Mesh, PathShape, QuadraticBezierShape, RectShape,

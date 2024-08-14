@@ -1,9 +1,9 @@
 use crate::shape_editor::index::{ShapeControlPointsIndex, SnapComponent};
-use crate::shape_editor::style;
-use crate::shape_editor::visitor::{
-    IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter, ShapePointIndex,
-    ShapeType, ShapeVisitor,
+use crate::shape_editor::shape_visitor::indexed_shape_control_points_visitor::{
+    IndexedShapeControlPointsVisitor, IndexedShapeControlPointsVisitorAdapter,
 };
+use crate::shape_editor::shape_visitor::{ShapePointIndex, ShapeType, ShapeVisitor};
+use crate::shape_editor::style;
 use egui::ahash::HashMap;
 use egui::{Color32, Pos2, Rect, Shape, Stroke};
 use std::collections::hash_map::Iter;

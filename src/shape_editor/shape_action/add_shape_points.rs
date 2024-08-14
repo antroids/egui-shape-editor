@@ -1,9 +1,10 @@
 use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::remove_shape_points::RemoveShapePoints;
 use crate::shape_editor::shape_action::{ShapeAction, ShapePoint};
-use crate::shape_editor::visitor::{
-    IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapePointIndex, ShapeVisitor,
+use crate::shape_editor::shape_visitor::indexed_shapes_visitor::{
+    IndexedShapesVisitor, IndexedShapesVisitorAdapter,
 };
+use crate::shape_editor::shape_visitor::{ShapePointIndex, ShapeVisitor};
 use egui::Shape;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};

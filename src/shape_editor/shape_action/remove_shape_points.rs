@@ -4,10 +4,11 @@ use crate::shape_editor::shape_action::replace_shapes::{ReplaceShapes, ReplaceSh
 use crate::shape_editor::shape_action::{
     Combined, RestoreSelectionActionWrapper, ShapeAction, ShapePoint,
 };
-use crate::shape_editor::utils::b_tree_map_grouped_by;
-use crate::shape_editor::visitor::{
-    IndexedShapesVisitor, IndexedShapesVisitorAdapter, ShapePointIndex, ShapeVisitor,
+use crate::shape_editor::shape_visitor::indexed_shapes_visitor::{
+    IndexedShapesVisitor, IndexedShapesVisitorAdapter,
 };
+use crate::shape_editor::shape_visitor::{ShapePointIndex, ShapeVisitor};
+use crate::shape_editor::utils::b_tree_map_grouped_by;
 use crate::shape_editor::Selection;
 use egui::Shape;
 use itertools::Itertools;

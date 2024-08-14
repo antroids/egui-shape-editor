@@ -3,9 +3,10 @@
 use egui::epaint::{Color32, CubicBezierShape, Shape, Stroke};
 use egui::panel::TopBottomSide;
 use egui::{Context, DragValue, Response, Rounding, Style, Ui, Visuals, Widget, WidgetText};
+use egui_shape_editor::shape_editor::constraints::Constraint;
 use egui_shape_editor::shape_editor::style::Light;
 use egui_shape_editor::shape_editor::{
-    ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions,
+    ParamType, ParamValue, ShapeEditorBuilder, ShapeEditorOptions, ShapePointIndex,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{BitOrAssign, RangeInclusive};
@@ -133,6 +134,13 @@ impl eframe::App for App {
                 ShapeEditorBuilder::new("Shape Editor".into(), &mut self.shape, &style)
                     .options(self.options.clone())
                     .build();
+
+            editor.with_constraints_mut(ctx, |constraints| {
+                constraints.add_constraint(Constraint::PointPositionRange(
+                    (1, 0).into(),
+                    (0f32..100f32, 0f32..100f32).into(),
+                ));
+            });
 
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {

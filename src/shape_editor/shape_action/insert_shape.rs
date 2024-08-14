@@ -1,7 +1,9 @@
 use crate::shape_editor::constraints::Constraints;
 use crate::shape_editor::shape_action::replace_shapes::ReplaceShapesVisitor;
 use crate::shape_editor::shape_action::{Noop, ShapeAction};
-use crate::shape_editor::visitor::{CountShapes, IndexedShapesVisitorAdapter, ShapeVisitor};
+use crate::shape_editor::shape_visitor::count_shapes::CountShapes;
+use crate::shape_editor::shape_visitor::indexed_shapes_visitor::IndexedShapesVisitorAdapter;
+use crate::shape_editor::shape_visitor::ShapeVisitor;
 use egui::epaint::{CubicBezierShape, QuadraticBezierShape};
 use egui::{Color32, Pos2, Shape, Stroke};
 use std::mem;

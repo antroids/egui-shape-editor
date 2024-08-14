@@ -1,12 +1,14 @@
 use crate::shape_editor::canvas::{CanvasContext, KeyboardAction};
+use crate::shape_editor::constraints::Constraint;
 use crate::shape_editor::control_point::ShapeControlPoint;
 use crate::shape_editor::memory::ShapeEditorMemory;
 use crate::shape_editor::shape_action::add_shape_points::AddShapePoints;
 use crate::shape_editor::shape_action::insert_shape::InsertShape;
 use crate::shape_editor::shape_action::remove_shape_points::RemoveShapePoints;
 use crate::shape_editor::shape_action::{move_shape_points, ShapeAction, ShapePoint};
+use crate::shape_editor::shape_visitor::last_shape_point_index::LastShapePointIndex;
+use crate::shape_editor::shape_visitor::ShapeType;
 use crate::shape_editor::style::Style;
-use crate::shape_editor::visitor::{LastShapePointIndex, ShapeType};
 use crate::shape_editor::{utils, ShapeEditorOptions};
 use dyn_clone::DynClone;
 use egui::epaint::{CubicBezierShape, PathShape, QuadraticBezierShape, Vertex};
@@ -425,10 +427,12 @@ impl Interaction for AddPoint {
             if options.connect_chained_shapes
                 && selected_point.shape_index != new_point_index.shape_index
             {
-                memory.constraints.connect_translation_bidirectional(
-                    selected_point,
-                    new_point_index.first_point(),
-                );
+                memory
+                    .constraints
+                    .add_constraint(Constraint::LinkTranslationBidirectional(
+                        selected_point,
+                        new_point_index.first_point(),
+                    ));
             }
         }
         None

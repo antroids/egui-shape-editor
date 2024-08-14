@@ -6,8 +6,8 @@ use super::transform::Transform;
 use crate::shape_editor::control_point::{ShapeControlPoint, ShapeControlPoints};
 use crate::shape_editor::index::GridIndex;
 use crate::shape_editor::memory::ShapeEditorMemory;
+use crate::shape_editor::shape_visitor::ShapePointIndex;
 use crate::shape_editor::snap::{paint_snap_point_highlight, SnapInfo};
-use crate::shape_editor::visitor::ShapePointIndex;
 use egui::ahash::HashMap;
 use egui::emath::One;
 use egui::{
